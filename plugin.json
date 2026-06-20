@@ -238,6 +238,9 @@
         "kind": "view",
         "view": "canvas"
       }
-    ]
+    ],
+    "skill": {
+      "path": "skill/SKILL.md"
+    }
   }
 }
