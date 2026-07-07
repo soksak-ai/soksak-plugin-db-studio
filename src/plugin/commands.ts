@@ -24,6 +24,9 @@ interface PluginFs {
   list?: (path: string, opts?: { meta?: boolean }) => Promise<unknown>;
 }
 
+// 다음 단계 제안 1건. cmd 는 완전정규화 커맨드 주소(plugin.<id>.<name>), why 는 제안 어조 한국어 문장.
+type Hint = { cmd: string; why: string };
+
 // soksak ctx 의 최소 표면(커맨드 등록 + 구독 폐기 수집 + 선택적 fs).
 interface PluginContext {
   subscriptions: Array<{ dispose(): void }>;
@@ -31,7 +34,15 @@ interface PluginContext {
     commands?: {
       register(
         name: string,
-        spec: { description: string; triggers?: { ko?: string; [lang: string]: string | undefined }; message?: (data: any) => string; params?: Record<string, unknown>; handler: (params: any) => Promise<any> },
+        spec: {
+          description: string;
+          triggers?: { ko?: string; [lang: string]: string | undefined };
+          message?: (data: any) => string;
+          params?: Record<string, unknown>;
+          // 코어 커맨드 스펙과 동형 — 성공 결과(data)로부터 다음 단계 커맨드를 최대 3개까지 제안.
+          hint?: (data: any, ctx?: any) => Hint[];
+          handler: (params: any) => Promise<any>;
+        },
       ): { dispose(): void };
     };
     fs?: PluginFs;
@@ -212,8 +223,12 @@ export function registerCommands(ctx: PluginContext, store: ErdStore): void {
 
   const internal = new Map<string, (params: any) => Promise<CmdResult>>();
 
+  // 완전정규화 커맨드 주소(외부 sok/MCP/소켓 호출 규약) — hint.cmd 조립용.
+  const cmd = (name: string) => `plugin.soksak-plugin-erd.${name}`;
+
   // 등록 + 구독 수집 + internal 적재를 한 번에.
   // message 는 성공 결과(data)를 한 문장으로 요약 — 코어 메시지 프로토콜(command.message) 표면.
+  // hint 는 대표 사용 사이클이 있는 커맨드에만 선택 부여(다음 단계 제안, 상한 3).
   const add = (
     name: string,
     description: string,
@@ -221,10 +236,11 @@ export function registerCommands(ctx: PluginContext, store: ErdStore): void {
     message: (data: any) => string,
     handler: (params: any) => CmdResult | Promise<CmdResult>,
     params?: Record<string, unknown>,
+    hint?: (data: any) => Hint[],
   ) => {
     const wrapped = async (p: any): Promise<CmdResult> => handler(p ?? {});
     internal.set(name, wrapped);
-    ctx.subscriptions.push(register(name, { description, triggers, message, params, handler: wrapped }));
+    ctx.subscriptions.push(register(name, { description, triggers, message, params, hint, handler: wrapped }));
   };
 
   // ── Introspection ──────────────────────────────────────────────────────────
@@ -278,7 +294,10 @@ export function registerCommands(ctx: PluginContext, store: ErdStore): void {
   add('validate', 'Validate schema integrity and return an array of issues', { ko: '스키마 검증 무결성 이슈 확인' }, (d) => `이슈 ${(d.issues ?? []).length}개`, () => {
     const issues = validateSchema(snapshotSchema(store));
     return { ok: true, issues };
-  });
+  }, undefined, (d) => (d.issues ?? []).length > 0 ? [] : [
+    { cmd: cmd('export-sql'), why: '검증된 스키마로 SQL 을 생성할 수 있습니다' },
+    { cmd: cmd('migration-generate'), why: '변경사항을 마이그레이션으로 기록할 수 있습니다' },
+  ]);
 
   add('stats', 'Return schema statistics: table count, column count, relationship count', { ko: '스키마 통계 테이블 컬럼 관계 수' }, (d) => `테이블 ${d.stats?.tableCount ?? 0}개 · 컬럼 ${d.stats?.columnCount ?? 0}개`, () => {
     const tables = Object.values(store.getState().tables);
@@ -330,7 +349,10 @@ export function registerCommands(ctx: PluginContext, store: ErdStore): void {
     comment: { type: 'string', description: 'Table comment' },
     schema: { type: 'string', description: 'Schema namespace the table belongs to' },
     ifNotExists: { type: 'boolean', description: 'Return noop instead of error when a table with the same name already exists' },
-  });
+  }, (d) => d.noop ? [] : [
+    { cmd: cmd('add-column'), why: '컬럼을 추가할 수 있습니다' },
+    { cmd: cmd('add-relationship'), why: '다른 테이블과 관계를 연결할 수 있습니다' },
+  ]);
 
   add('rename-table', 'Rename an existing table', { ko: '테이블 이름 변경 rename' }, () => '테이블 이름을 변경했습니다', (p) => {
     const r = resolveTable(store, p.table);
@@ -590,7 +612,10 @@ export function registerCommands(ctx: PluginContext, store: ErdStore): void {
     name: { type: 'string', description: 'Relationship (constraint) name' },
     onDelete: { type: 'string', enum: ['CASCADE', 'SET NULL', 'RESTRICT', 'NO ACTION', 'SET DEFAULT'], description: 'ON DELETE referential action', default: 'NO ACTION' },
     onUpdate: { type: 'string', enum: ['CASCADE', 'SET NULL', 'RESTRICT', 'NO ACTION', 'SET DEFAULT'], description: 'ON UPDATE referential action', default: 'NO ACTION' },
-  });
+  }, () => [
+    { cmd: cmd('auto-layout'), why: '테이블 배치를 자동 정렬할 수 있습니다' },
+    { cmd: cmd('validate'), why: '스키마 무결성을 검증할 수 있습니다' },
+  ]);
 
   add('update-relationship', 'Update properties of an existing FK relationship', { ko: '관계 수정 외래키 속성 변경' }, () => '관계를 수정했습니다', (p) => {
     if (!p.id || !store.getState().relationships[p.id]) {
@@ -682,7 +707,10 @@ export function registerCommands(ctx: PluginContext, store: ErdStore): void {
     ops: { type: 'json', required: true, description: 'Array of operations to execute ([{ command, params }])' },
     atomic: { type: 'boolean', description: 'Roll back all changes to the pre-batch snapshot if any operation fails (default true)', default: true },
     title: { type: 'string', description: 'Migration version title to commit on success' },
-  });
+  }, (d) => d.ok === false ? [] : [
+    { cmd: cmd('get-schema'), why: '적용된 스키마를 확인할 수 있습니다' },
+    { cmd: cmd('validate'), why: '무결성을 검증할 수 있습니다' },
+  ]);
 
   add('undo', 'Revert the last uncommitted operation using the migration slice', { ko: '실행 취소 되돌리기 undo' }, () => '실행을 취소했습니다', () => {
     const fn = store.getState().undoLastOperation;
@@ -782,6 +810,12 @@ export function registerCommands(ctx: PluginContext, store: ErdStore): void {
   // export: 현재 스키마 → 외부 포맷 문자열. import: 외부 포맷 → 파싱 후 store 적재.
   // 파싱 실패/엔진 throw 는 {ok:false,code,message} 로 흡수한다.
 
+  // import-* 4종(sql/dbml/prisma/mermaid) 공통 다음 단계 — 가져온 스키마 검증 + 배치.
+  const importHint = (d: any): Hint[] => d.ok === false ? [] : [
+    { cmd: cmd('validate'), why: '가져온 스키마의 무결성을 검증할 수 있습니다' },
+    { cmd: cmd('auto-layout'), why: '테이블 배치를 자동 정렬할 수 있습니다' },
+  ];
+
   add('export-sql', 'Generate SQL DDL from the current schema for the selected dialect', { ko: 'SQL 내보내기 DDL 생성 데이터베이스' }, () => 'SQL 을 생성했습니다', (p) => {
     const dialect = (p.dialect as DialectId) ?? 'mysql';
     try {
@@ -809,7 +843,7 @@ export function registerCommands(ctx: PluginContext, store: ErdStore): void {
     text: { type: 'string', required: true, description: 'SQL DDL text to parse' },
     dialect: { type: 'string', enum: ['sqlite', 'mysql', 'postgresql'], description: 'Dialect of the input DDL', default: 'mysql' },
     mode: { type: 'string', enum: ['merge', 'replace'], description: 'merge: add on top of existing schema; replace: clear then load', default: 'merge' },
-  });
+  }, importHint);
 
   add('export-dbml', 'Generate DBML from the current schema', { ko: 'DBML 내보내기 생성' }, () => 'DBML 을 생성했습니다', () => {
     try {
@@ -832,7 +866,7 @@ export function registerCommands(ctx: PluginContext, store: ErdStore): void {
   }, {
     text: { type: 'string', required: true, description: 'DBML text to parse' },
     mode: { type: 'string', enum: ['merge', 'replace'], description: 'merge: add on top of existing schema; replace: clear then load', default: 'merge' },
-  });
+  }, importHint);
 
   add('export-prisma', 'Generate a Prisma schema from the current ERD schema', { ko: 'Prisma 스키마 내보내기 생성' }, () => 'Prisma 스키마를 생성했습니다', () => {
     try {
@@ -855,7 +889,7 @@ export function registerCommands(ctx: PluginContext, store: ErdStore): void {
   }, {
     text: { type: 'string', required: true, description: 'Prisma schema text to parse' },
     mode: { type: 'string', enum: ['merge', 'replace'], description: 'merge: add on top of existing schema; replace: clear then load', default: 'merge' },
-  });
+  }, importHint);
 
   add('export-mermaid', 'Generate a Mermaid erDiagram from the current schema', { ko: 'Mermaid 다이어그램 내보내기 생성' }, () => 'Mermaid 다이어그램을 생성했습니다', () => {
     try {
@@ -879,7 +913,7 @@ export function registerCommands(ctx: PluginContext, store: ErdStore): void {
   }, {
     text: { type: 'string', required: true, description: 'Mermaid erDiagram text to parse' },
     mode: { type: 'string', enum: ['merge', 'replace'], description: 'merge: add on top of existing schema; replace: clear then load', default: 'merge' },
-  });
+  }, importHint);
 
   // ── migration(파일 기반 .mig 마이그레이션) ───────────────────────────────────
   // write 계열은 dir(절대경로) 필수 — 헤드리스·명시적(프로젝트 git 관리).
@@ -910,7 +944,9 @@ export function registerCommands(ctx: PluginContext, store: ErdStore): void {
     }
   }, {
     dir: { type: 'string', required: true, description: 'Absolute path to the migration directory' },
-  });
+  }, (d) => (d.pendingOps ?? 0) > 0 ? [
+    { cmd: cmd('migration-generate'), why: '대기 변경을 .mig 파일로 생성할 수 있습니다' },
+  ] : []);
 
   add('migration-generate', 'Generate a .mig file from the diff between the baseline and the current schema; previews only unless confirm is true', { ko: '마이그레이션 생성 .mig 파일 diff 저장' }, (d) => d.noop ? '변경이 없습니다' : d.written ? `${d.filename} 을 기록했습니다` : '미리보기를 생성했습니다', async (p) => {
     const g = needFs(); if (g) return g;
@@ -937,7 +973,10 @@ export function registerCommands(ctx: PluginContext, store: ErdStore): void {
     dir: { type: 'string', required: true, description: 'Absolute path to the migration directory' },
     name: { type: 'string', description: 'Migration name written as a -- name: comment in the file' },
     confirm: { type: 'boolean', description: 'Write the file to disk when true; return a preview (mig/ops) only when omitted' },
-  });
+  }, (d) => d.written ? [
+    { cmd: cmd('migration-sql'), why: '생성된 마이그레이션의 SQL 을 확인할 수 있습니다' },
+    { cmd: cmd('migration-apply'), why: '마이그레이션을 워킹 스키마에 적용할 수 있습니다' },
+  ] : []);
 
   add('migration-list', 'List .mig files in a directory sorted by name (chronological order)', { ko: '마이그레이션 목록 .mig 파일 조회' }, (d) => `마이그레이션 ${d.count ?? 0}개`, async (p) => {
     const g = needFs(); if (g) return g;

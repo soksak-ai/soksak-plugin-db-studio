@@ -87330,10 +87330,11 @@ function registerCommands(ctx, store) {
   if (!reg) return;
   const register = reg.bind(ctx.app.commands);
   const internal = /* @__PURE__ */ new Map();
-  const add2 = (name, description, triggers, message, handler, params) => {
+  const cmd = (name) => `plugin.soksak-plugin-erd.${name}`;
+  const add2 = (name, description, triggers, message, handler, params, hint) => {
     const wrapped = async (p3) => handler(p3 ?? {});
     internal.set(name, wrapped);
-    ctx.subscriptions.push(register(name, { description, triggers, message, params, handler: wrapped }));
+    ctx.subscriptions.push(register(name, { description, triggers, message, params, hint, handler: wrapped }));
   };
   add2("get-schema", "Return current ERD schema (mode: compact summary | full raw)", { ko: "\uC2A4\uD0A4\uB9C8 \uC870\uD68C ERD \uC804\uCCB4 \uAD6C\uC870 \uD655\uC778" }, () => "\uC2A4\uD0A4\uB9C8\uB97C \uC870\uD68C\uD588\uC2B5\uB2C8\uB2E4", (p3) => {
     const mode = p3.mode === "full" ? "full" : "compact";
@@ -87380,7 +87381,10 @@ function registerCommands(ctx, store) {
   add2("validate", "Validate schema integrity and return an array of issues", { ko: "\uC2A4\uD0A4\uB9C8 \uAC80\uC99D \uBB34\uACB0\uC131 \uC774\uC288 \uD655\uC778" }, (d3) => `\uC774\uC288 ${(d3.issues ?? []).length}\uAC1C`, () => {
     const issues = validateSchema(snapshotSchema(store));
     return { ok: true, issues };
-  });
+  }, void 0, (d3) => (d3.issues ?? []).length > 0 ? [] : [
+    { cmd: cmd("export-sql"), why: "\uAC80\uC99D\uB41C \uC2A4\uD0A4\uB9C8\uB85C SQL \uC744 \uC0DD\uC131\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" },
+    { cmd: cmd("migration-generate"), why: "\uBCC0\uACBD\uC0AC\uD56D\uC744 \uB9C8\uC774\uADF8\uB808\uC774\uC158\uC73C\uB85C \uAE30\uB85D\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" }
+  ]);
   add2("stats", "Return schema statistics: table count, column count, relationship count", { ko: "\uC2A4\uD0A4\uB9C8 \uD1B5\uACC4 \uD14C\uC774\uBE14 \uCEEC\uB7FC \uAD00\uACC4 \uC218" }, (d3) => `\uD14C\uC774\uBE14 ${d3.stats?.tableCount ?? 0}\uAC1C \xB7 \uCEEC\uB7FC ${d3.stats?.columnCount ?? 0}\uAC1C`, () => {
     const tables = Object.values(store.getState().tables);
     const columnCount = tables.reduce((acc, t3) => acc + t3.columns.length, 0);
@@ -87428,7 +87432,10 @@ function registerCommands(ctx, store) {
     comment: { type: "string", description: "Table comment" },
     schema: { type: "string", description: "Schema namespace the table belongs to" },
     ifNotExists: { type: "boolean", description: "Return noop instead of error when a table with the same name already exists" }
-  });
+  }, (d3) => d3.noop ? [] : [
+    { cmd: cmd("add-column"), why: "\uCEEC\uB7FC\uC744 \uCD94\uAC00\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" },
+    { cmd: cmd("add-relationship"), why: "\uB2E4\uB978 \uD14C\uC774\uBE14\uACFC \uAD00\uACC4\uB97C \uC5F0\uACB0\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" }
+  ]);
   add2("rename-table", "Rename an existing table", { ko: "\uD14C\uC774\uBE14 \uC774\uB984 \uBCC0\uACBD rename" }, () => "\uD14C\uC774\uBE14 \uC774\uB984\uC744 \uBCC0\uACBD\uD588\uC2B5\uB2C8\uB2E4", (p3) => {
     const r4 = resolveTable(store, p3.table);
     if (!r4.ok) return r4;
@@ -87670,7 +87677,10 @@ function registerCommands(ctx, store) {
     name: { type: "string", description: "Relationship (constraint) name" },
     onDelete: { type: "string", enum: ["CASCADE", "SET NULL", "RESTRICT", "NO ACTION", "SET DEFAULT"], description: "ON DELETE referential action", default: "NO ACTION" },
     onUpdate: { type: "string", enum: ["CASCADE", "SET NULL", "RESTRICT", "NO ACTION", "SET DEFAULT"], description: "ON UPDATE referential action", default: "NO ACTION" }
-  });
+  }, () => [
+    { cmd: cmd("auto-layout"), why: "\uD14C\uC774\uBE14 \uBC30\uCE58\uB97C \uC790\uB3D9 \uC815\uB82C\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" },
+    { cmd: cmd("validate"), why: "\uC2A4\uD0A4\uB9C8 \uBB34\uACB0\uC131\uC744 \uAC80\uC99D\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" }
+  ]);
   add2("update-relationship", "Update properties of an existing FK relationship", { ko: "\uAD00\uACC4 \uC218\uC815 \uC678\uB798\uD0A4 \uC18D\uC131 \uBCC0\uACBD" }, () => "\uAD00\uACC4\uB97C \uC218\uC815\uD588\uC2B5\uB2C8\uB2E4", (p3) => {
     if (!p3.id || !store.getState().relationships[p3.id]) {
       return { ok: false, code: "NOT_FOUND", message: `relationship not found: '${p3.id}'` };
@@ -87755,7 +87765,10 @@ function registerCommands(ctx, store) {
     ops: { type: "json", required: true, description: "Array of operations to execute ([{ command, params }])" },
     atomic: { type: "boolean", description: "Roll back all changes to the pre-batch snapshot if any operation fails (default true)", default: true },
     title: { type: "string", description: "Migration version title to commit on success" }
-  });
+  }, (d3) => d3.ok === false ? [] : [
+    { cmd: cmd("get-schema"), why: "\uC801\uC6A9\uB41C \uC2A4\uD0A4\uB9C8\uB97C \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" },
+    { cmd: cmd("validate"), why: "\uBB34\uACB0\uC131\uC744 \uAC80\uC99D\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" }
+  ]);
   add2("undo", "Revert the last uncommitted operation using the migration slice", { ko: "\uC2E4\uD589 \uCDE8\uC18C \uB418\uB3CC\uB9AC\uAE30 undo" }, () => "\uC2E4\uD589\uC744 \uCDE8\uC18C\uD588\uC2B5\uB2C8\uB2E4", () => {
     const fn = store.getState().undoLastOperation;
     if (typeof fn !== "function") return { ok: false, code: "UNAVAILABLE", message: "undo not available" };
@@ -87837,6 +87850,10 @@ function registerCommands(ctx, store) {
       viewport: s3.viewport
     };
   });
+  const importHint = (d3) => d3.ok === false ? [] : [
+    { cmd: cmd("validate"), why: "\uAC00\uC838\uC628 \uC2A4\uD0A4\uB9C8\uC758 \uBB34\uACB0\uC131\uC744 \uAC80\uC99D\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" },
+    { cmd: cmd("auto-layout"), why: "\uD14C\uC774\uBE14 \uBC30\uCE58\uB97C \uC790\uB3D9 \uC815\uB82C\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" }
+  ];
   add2("export-sql", "Generate SQL DDL from the current schema for the selected dialect", { ko: "SQL \uB0B4\uBCF4\uB0B4\uAE30 DDL \uC0DD\uC131 \uB370\uC774\uD130\uBCA0\uC774\uC2A4" }, () => "SQL \uC744 \uC0DD\uC131\uD588\uC2B5\uB2C8\uB2E4", (p3) => {
     const dialect = p3.dialect ?? "mysql";
     try {
@@ -87863,7 +87880,7 @@ function registerCommands(ctx, store) {
     text: { type: "string", required: true, description: "SQL DDL text to parse" },
     dialect: { type: "string", enum: ["sqlite", "mysql", "postgresql"], description: "Dialect of the input DDL", default: "mysql" },
     mode: { type: "string", enum: ["merge", "replace"], description: "merge: add on top of existing schema; replace: clear then load", default: "merge" }
-  });
+  }, importHint);
   add2("export-dbml", "Generate DBML from the current schema", { ko: "DBML \uB0B4\uBCF4\uB0B4\uAE30 \uC0DD\uC131" }, () => "DBML \uC744 \uC0DD\uC131\uD588\uC2B5\uB2C8\uB2E4", () => {
     try {
       return { ok: true, dbml: generateDbml(snapshotSchema(store)) };
@@ -87884,7 +87901,7 @@ function registerCommands(ctx, store) {
   }, {
     text: { type: "string", required: true, description: "DBML text to parse" },
     mode: { type: "string", enum: ["merge", "replace"], description: "merge: add on top of existing schema; replace: clear then load", default: "merge" }
-  });
+  }, importHint);
   add2("export-prisma", "Generate a Prisma schema from the current ERD schema", { ko: "Prisma \uC2A4\uD0A4\uB9C8 \uB0B4\uBCF4\uB0B4\uAE30 \uC0DD\uC131" }, () => "Prisma \uC2A4\uD0A4\uB9C8\uB97C \uC0DD\uC131\uD588\uC2B5\uB2C8\uB2E4", () => {
     try {
       return { ok: true, prisma: generatePrisma(snapshotSchema(store)) };
@@ -87905,7 +87922,7 @@ function registerCommands(ctx, store) {
   }, {
     text: { type: "string", required: true, description: "Prisma schema text to parse" },
     mode: { type: "string", enum: ["merge", "replace"], description: "merge: add on top of existing schema; replace: clear then load", default: "merge" }
-  });
+  }, importHint);
   add2("export-mermaid", "Generate a Mermaid erDiagram from the current schema", { ko: "Mermaid \uB2E4\uC774\uC5B4\uADF8\uB7A8 \uB0B4\uBCF4\uB0B4\uAE30 \uC0DD\uC131" }, () => "Mermaid \uB2E4\uC774\uC5B4\uADF8\uB7A8\uC744 \uC0DD\uC131\uD588\uC2B5\uB2C8\uB2E4", () => {
     try {
       return { ok: true, mermaid: generateMermaid(snapshotSchema(store)) };
@@ -87926,7 +87943,7 @@ function registerCommands(ctx, store) {
   }, {
     text: { type: "string", required: true, description: "Mermaid erDiagram text to parse" },
     mode: { type: "string", enum: ["merge", "replace"], description: "merge: add on top of existing schema; replace: clear then load", default: "merge" }
-  });
+  }, importHint);
   const fs = ctx.app.fs;
   const needFs = () => fs ? null : { ok: false, code: "GATE_REQUIRED", message: "fs \uAD8C\uD55C \uD544\uC694" };
   const requireDir = (p3) => typeof p3.dir === "string" && p3.dir.length > 0 ? null : { ok: false, code: "INVALID_INPUT", message: "dir(\uC808\uB300\uACBD\uB85C) required" };
@@ -87951,7 +87968,9 @@ function registerCommands(ctx, store) {
     }
   }, {
     dir: { type: "string", required: true, description: "Absolute path to the migration directory" }
-  });
+  }, (d3) => (d3.pendingOps ?? 0) > 0 ? [
+    { cmd: cmd("migration-generate"), why: "\uB300\uAE30 \uBCC0\uACBD\uC744 .mig \uD30C\uC77C\uB85C \uC0DD\uC131\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" }
+  ] : []);
   add2("migration-generate", "Generate a .mig file from the diff between the baseline and the current schema; previews only unless confirm is true", { ko: "\uB9C8\uC774\uADF8\uB808\uC774\uC158 \uC0DD\uC131 .mig \uD30C\uC77C diff \uC800\uC7A5" }, (d3) => d3.noop ? "\uBCC0\uACBD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4" : d3.written ? `${d3.filename} \uC744 \uAE30\uB85D\uD588\uC2B5\uB2C8\uB2E4` : "\uBBF8\uB9AC\uBCF4\uAE30\uB97C \uC0DD\uC131\uD588\uC2B5\uB2C8\uB2E4", async (p3) => {
     const g3 = needFs();
     if (g3) return g3;
@@ -87977,7 +87996,10 @@ function registerCommands(ctx, store) {
     dir: { type: "string", required: true, description: "Absolute path to the migration directory" },
     name: { type: "string", description: "Migration name written as a -- name: comment in the file" },
     confirm: { type: "boolean", description: "Write the file to disk when true; return a preview (mig/ops) only when omitted" }
-  });
+  }, (d3) => d3.written ? [
+    { cmd: cmd("migration-sql"), why: "\uC0DD\uC131\uB41C \uB9C8\uC774\uADF8\uB808\uC774\uC158\uC758 SQL \uC744 \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" },
+    { cmd: cmd("migration-apply"), why: "\uB9C8\uC774\uADF8\uB808\uC774\uC158\uC744 \uC6CC\uD0B9 \uC2A4\uD0A4\uB9C8\uC5D0 \uC801\uC6A9\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" }
+  ] : []);
   add2("migration-list", "List .mig files in a directory sorted by name (chronological order)", { ko: "\uB9C8\uC774\uADF8\uB808\uC774\uC158 \uBAA9\uB85D .mig \uD30C\uC77C \uC870\uD68C" }, (d3) => `\uB9C8\uC774\uADF8\uB808\uC774\uC158 ${d3.count ?? 0}\uAC1C`, async (p3) => {
     const g3 = needFs();
     if (g3) return g3;
