@@ -70592,7 +70592,14 @@ function FileMenu() {
               viewport: project.diagramState.viewport ?? { x: 0, y: 0, zoom: 1 }
             });
           }
-        } catch {
+          if (project.migrations) {
+            useStore2.setState({
+              migrationHistory: project.migrations.versions ?? [],
+              uncommittedOps: project.migrations.uncommittedOps ?? []
+            });
+          }
+        } catch (err) {
+          console.error("[erd] .erd.json \uC5F4\uAE30 \uC2E4\uD328:", err);
         }
       };
       reader.readAsText(file);
