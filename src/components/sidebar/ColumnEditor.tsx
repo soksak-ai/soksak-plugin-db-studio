@@ -5,8 +5,8 @@ import type { Column } from '@/types/schema';
 import { DATA_TYPES } from '@/constants/data-types';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { TypeCombobox } from '@/components/sidebar/TypeCombobox';
 import { KeyRound, Square, X, GripVertical, PlusCircle } from 'lucide-react';
 import {
   DndContext,
@@ -95,21 +95,12 @@ function SortableColumn({ column, tableId }: { column: Column; tableId: string }
 
       {/* Bottom row: type select + checkboxes */}
       <div className="flex items-center gap-2">
-        <Select
+        <TypeCombobox
           value={column.dataType}
-          onValueChange={(value) => updateColumn(tableId, column.id, { dataType: value })}
-        >
-          <SelectTrigger size="sm" className="h-6 text-[11px] flex-1 min-w-0">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {dataTypes.map((type) => (
-              <SelectItem key={type} value={type} className="text-xs">
-                {type}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          options={dataTypes}
+          onChange={(value) => updateColumn(tableId, column.id, { dataType: value })}
+          nodeSuffix={column.id.toLowerCase().replace(/[^a-z0-9.-]+/g, '-')}
+        />
 
         <div className="flex items-center gap-1.5 shrink-0">
           <label className="flex items-center gap-0.5 cursor-pointer">
@@ -183,21 +174,12 @@ function PlainColumn({ column, tableId }: { column: Column; tableId: string }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <Select
+        <TypeCombobox
           value={column.dataType}
-          onValueChange={(value) => updateColumn(tableId, column.id, { dataType: value })}
-        >
-          <SelectTrigger size="sm" className="h-6 text-[11px] flex-1 min-w-0">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {dataTypes.map((type) => (
-              <SelectItem key={type} value={type} className="text-xs">
-                {type}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          options={dataTypes}
+          onChange={(value) => updateColumn(tableId, column.id, { dataType: value })}
+          nodeSuffix={column.id.toLowerCase().replace(/[^a-z0-9.-]+/g, '-')}
+        />
 
         <div className="flex items-center gap-1.5 shrink-0">
           <label className="flex items-center gap-0.5 cursor-pointer">
