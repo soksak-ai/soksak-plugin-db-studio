@@ -484,6 +484,10 @@
         "description": "A command-palette action row (data-node palette-item/<action-id>)"
       },
       {
+        "id": "coltype",
+        "description": "Column data-type combobox (data-node coltype/<column-id>, input at coltype/<column-id>-input)"
+      },
+      {
         "id": "auto-layout",
         "description": "Toolbar: auto-arrange table positions"
       },

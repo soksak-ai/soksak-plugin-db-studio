@@ -44,8 +44,13 @@ function wiredBaseIds(): string[] {
   for (const m of html.matchAll(/data-node="([^"]+)"/g)) found.add(m[1].split('/')[0]);
   for (const file of walk(srcRoot)) {
     const text = readFileSync(file, 'utf8');
+    // data-node="base" / "base/..."
     for (const m of text.matchAll(/data-node="([^"/{]+)/g)) found.add(m[1]);
+    // data-node={`base/...`} (템플릿 리터럴이 { 바로 뒤)
     for (const m of text.matchAll(/data-node=\{`([^`/$]+)/g)) found.add(m[1]);
+    // 합성 표현: data-node={ <expr> ? `base/...` : … } / {cond ? 'base/'+x : …} —
+    // 중괄호 안 어디든 등장하는 "base/" 문자열/템플릿 리터럴에서 base 를 수집.
+    for (const m of text.matchAll(/data-node=\{[^}]*?[`'"]([a-z0-9][a-z0-9.-]*)\//g)) found.add(m[1]);
   }
   return [...found];
 }
