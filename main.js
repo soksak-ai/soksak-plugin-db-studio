@@ -57777,409 +57777,13 @@ var createUISlice = (set2) => ({
   })
 });
 
-// src/features/migration/operations/inverse.ts
-function generateInverse(op) {
-  const p3 = op.params;
-  switch (op.type) {
-    case "createTable":
-      return {
-        ...op,
-        type: "dropTable",
-        params: { name: p3.name, _tableData: op.params }
-      };
-    case "dropTable":
-      return p3._tableData ? { ...op, type: "createTable", params: p3._tableData } : null;
-    case "renameTable":
-      return {
-        ...op,
-        type: "renameTable",
-        params: { oldName: p3.newName, newName: p3.oldName }
-      };
-    case "addColumn":
-      return {
-        ...op,
-        type: "dropColumn",
-        params: { table: p3.table, name: p3.name, _columnData: op.params }
-      };
-    case "dropColumn":
-      return p3._columnData ? { ...op, type: "addColumn", params: p3._columnData } : null;
-    case "renameColumn":
-      return {
-        ...op,
-        type: "renameColumn",
-        params: { table: p3.table, oldName: p3.newName, newName: p3.oldName }
-      };
-    case "modifyColumnType":
-      return {
-        ...op,
-        type: "modifyColumnType",
-        params: { table: p3.table, column: p3.column, oldType: p3.newType, newType: p3.oldType }
-      };
-    case "modifyColumnDefault":
-      return {
-        ...op,
-        type: "modifyColumnDefault",
-        params: { table: p3.table, column: p3.column, oldDefault: p3.newDefault, newDefault: p3.oldDefault }
-      };
-    case "setColumnNullable":
-      return {
-        ...op,
-        type: "setColumnNullable",
-        params: { table: p3.table, column: p3.column, nullable: p3.oldNullable, oldNullable: p3.nullable }
-      };
-    case "setColumnAutoIncrement":
-      return {
-        ...op,
-        type: "setColumnAutoIncrement",
-        params: { table: p3.table, column: p3.column, autoIncrement: !p3.autoIncrement }
-      };
-    case "setColumnUnique":
-      return {
-        ...op,
-        type: "setColumnUnique",
-        params: { table: p3.table, column: p3.column, unique: !p3.unique }
-      };
-    case "addPrimaryKey":
-      return {
-        ...op,
-        type: "dropPrimaryKey",
-        params: { table: p3.table, columns: p3.columns }
-      };
-    case "dropPrimaryKey":
-      return {
-        ...op,
-        type: "addPrimaryKey",
-        params: { table: p3.table, columns: p3.columns }
-      };
-    case "addForeignKey": {
-      const fkName = p3.name ?? `fk_${p3.table}_${p3.columns[0]}`;
-      return {
-        ...op,
-        type: "dropForeignKey",
-        params: { table: p3.table, name: fkName, _fkData: op.params }
-      };
-    }
-    case "dropForeignKey":
-      return p3._fkData ? { ...op, type: "addForeignKey", params: p3._fkData } : null;
-    case "addUniqueConstraint": {
-      const uqName = p3.name ?? `uq_${p3.table}_${p3.columns[0]}`;
-      return {
-        ...op,
-        type: "dropUniqueConstraint",
-        params: { table: p3.table, name: uqName, columns: p3.columns }
-      };
-    }
-    case "dropUniqueConstraint":
-      return p3.columns ? { ...op, type: "addUniqueConstraint", params: { table: p3.table, name: p3.name, columns: p3.columns } } : null;
-    case "createIndex":
-      return {
-        ...op,
-        type: "dropIndex",
-        params: { table: p3.table, name: p3.name, _indexData: op.params }
-      };
-    case "dropIndex":
-      return p3._indexData ? { ...op, type: "createIndex", params: p3._indexData } : null;
-    default:
-      return null;
-  }
-}
-
-// src/features/migration/sql-generator/mysql-generator.ts
-var MySQLGenerator = class {
-  dialect = "mysql";
-  generate(op) {
-    const p3 = op.params;
-    switch (op.type) {
-      case "createTable": {
-        const columns = p3.columns ?? [];
-        const colDefs = columns.map((c3) => {
-          let def = `  \`${c3.name}\` ${c3.dataType}`;
-          if (c3.length) def += `(${c3.length})`;
-          if (c3.autoIncrement) def += " AUTO_INCREMENT";
-          if (!c3.nullable) def += " NOT NULL";
-          if (c3.defaultValue != null) def += ` DEFAULT ${c3.defaultValue}`;
-          if (c3.isUnique) def += " UNIQUE";
-          if (c3.comment) def += ` COMMENT '${c3.comment}'`;
-          return def;
-        });
-        const pks = columns.filter((c3) => c3.isPrimaryKey).map((c3) => `\`${c3.name}\``);
-        if (pks.length > 0) colDefs.push(`  PRIMARY KEY (${pks.join(", ")})`);
-        let sql = `CREATE TABLE \`${p3.name}\` (
-${colDefs.join(",\n")}
-)`;
-        if (p3.engine) sql += ` ENGINE=${p3.engine}`;
-        if (p3.charset) sql += ` DEFAULT CHARSET=${p3.charset}`;
-        if (p3.comment) sql += ` COMMENT='${p3.comment}'`;
-        return sql + ";";
-      }
-      case "dropTable":
-        return `DROP TABLE IF EXISTS \`${p3.name}\`;`;
-      case "renameTable":
-        return `ALTER TABLE \`${p3.oldName}\` RENAME TO \`${p3.newName}\`;`;
-      case "addColumn": {
-        let sql = `ALTER TABLE \`${p3.table}\` ADD COLUMN \`${p3.name}\` ${p3.dataType ?? "VARCHAR(255)"}`;
-        if (!(p3.nullable ?? true)) sql += " NOT NULL";
-        if (p3.defaultValue != null) sql += ` DEFAULT ${p3.defaultValue}`;
-        if (p3.autoIncrement) sql += " AUTO_INCREMENT";
-        if (p3.isUnique) sql += " UNIQUE";
-        if (p3.after) sql += ` AFTER \`${p3.after}\``;
-        return sql + ";";
-      }
-      case "dropColumn":
-        return `ALTER TABLE \`${p3.table}\` DROP COLUMN \`${p3.name}\`;`;
-      case "renameColumn":
-        return `ALTER TABLE \`${p3.table}\` RENAME COLUMN \`${p3.oldName}\` TO \`${p3.newName}\`;`;
-      case "modifyColumnType":
-        return `ALTER TABLE \`${p3.table}\` MODIFY COLUMN \`${p3.column}\` ${p3.newType};`;
-      case "modifyColumnDefault":
-        return p3.newDefault != null ? `ALTER TABLE \`${p3.table}\` ALTER COLUMN \`${p3.column}\` SET DEFAULT ${p3.newDefault};` : `ALTER TABLE \`${p3.table}\` ALTER COLUMN \`${p3.column}\` DROP DEFAULT;`;
-      case "setColumnNullable":
-        return p3.nullable ? `ALTER TABLE \`${p3.table}\` MODIFY COLUMN \`${p3.column}\` NULL;` : `ALTER TABLE \`${p3.table}\` MODIFY COLUMN \`${p3.column}\` NOT NULL;`;
-      case "setColumnAutoIncrement":
-        return p3.autoIncrement ? `ALTER TABLE \`${p3.table}\` MODIFY COLUMN \`${p3.column}\` AUTO_INCREMENT;` : `ALTER TABLE \`${p3.table}\` MODIFY COLUMN \`${p3.column}\`;`;
-      case "setColumnUnique":
-        return p3.unique ? `ALTER TABLE \`${p3.table}\` ADD UNIQUE (\`${p3.column}\`);` : `ALTER TABLE \`${p3.table}\` DROP INDEX \`${p3.column}\`;`;
-      case "addPrimaryKey": {
-        const cols = p3.columns.map((c3) => `\`${c3}\``).join(", ");
-        return `ALTER TABLE \`${p3.table}\` ADD PRIMARY KEY (${cols});`;
-      }
-      case "dropPrimaryKey":
-        return `ALTER TABLE \`${p3.table}\` DROP PRIMARY KEY;`;
-      case "addForeignKey": {
-        const name = p3.name ?? `fk_${p3.table}_${p3.columns[0]}`;
-        const cols = p3.columns.map((c3) => `\`${c3}\``).join(", ");
-        const refCols = p3.refColumns.map((c3) => `\`${c3}\``).join(", ");
-        return `ALTER TABLE \`${p3.table}\` ADD CONSTRAINT \`${name}\` FOREIGN KEY (${cols}) REFERENCES \`${p3.refTable}\`(${refCols}) ON DELETE ${p3.onDelete} ON UPDATE ${p3.onUpdate};`;
-      }
-      case "dropForeignKey":
-        return `ALTER TABLE \`${p3.table}\` DROP FOREIGN KEY \`${p3.name}\`;`;
-      case "addUniqueConstraint": {
-        const name = p3.name ?? `uq_${p3.table}_${p3.columns[0]}`;
-        const cols = p3.columns.map((c3) => `\`${c3}\``).join(", ");
-        return `ALTER TABLE \`${p3.table}\` ADD CONSTRAINT \`${name}\` UNIQUE (${cols});`;
-      }
-      case "dropUniqueConstraint":
-        return `ALTER TABLE \`${p3.table}\` DROP INDEX \`${p3.name}\`;`;
-      case "createIndex": {
-        const unique = p3.unique ? "UNIQUE " : "";
-        const cols = p3.columns.map((c3) => `\`${c3}\``).join(", ");
-        return `CREATE ${unique}INDEX \`${p3.name}\` ON \`${p3.table}\`(${cols});`;
-      }
-      case "dropIndex":
-        return `DROP INDEX \`${p3.name}\` ON \`${p3.table}\`;`;
-      default:
-        return `-- Unknown operation: ${op.type}`;
-    }
-  }
-  generateBatch(ops) {
-    return ops.map((op) => this.generate(op)).join("\n\n");
-  }
-};
-
-// src/features/migration/sql-generator/postgresql-generator.ts
-var PostgreSQLGenerator = class {
-  dialect = "postgresql";
-  generate(op) {
-    const p3 = op.params;
-    switch (op.type) {
-      case "createTable": {
-        const columns = p3.columns ?? [];
-        const colDefs = columns.map((c3) => {
-          const isSerial = c3.autoIncrement && /^(INT|INTEGER|BIGINT)/i.test(c3.dataType);
-          let def;
-          if (isSerial) {
-            const serialType = /^BIGINT/i.test(c3.dataType) ? "BIGSERIAL" : "SERIAL";
-            def = `  "${c3.name}" ${serialType}`;
-          } else {
-            def = `  "${c3.name}" ${c3.dataType}`;
-            if (c3.length) def += `(${c3.length})`;
-          }
-          if (!c3.nullable) def += " NOT NULL";
-          if (c3.defaultValue != null && !isSerial) def += ` DEFAULT ${c3.defaultValue}`;
-          if (c3.isUnique) def += " UNIQUE";
-          return def;
-        });
-        const pks = columns.filter((c3) => c3.isPrimaryKey).map((c3) => `"${c3.name}"`);
-        if (pks.length > 0) colDefs.push(`  PRIMARY KEY (${pks.join(", ")})`);
-        const schemaPrefix = p3.schema ? `"${p3.schema}".` : "";
-        let sql = `CREATE TABLE ${schemaPrefix}"${p3.name}" (
-${colDefs.join(",\n")}
-)`;
-        if (p3.comment) sql += `;
-COMMENT ON TABLE ${schemaPrefix}"${p3.name}" IS '${p3.comment}'`;
-        return sql + ";";
-      }
-      case "dropTable": {
-        const schemaPrefix = p3.schema ? `"${p3.schema}".` : "";
-        return `DROP TABLE IF EXISTS ${schemaPrefix}"${p3.name}" CASCADE;`;
-      }
-      case "renameTable":
-        return `ALTER TABLE "${p3.oldName}" RENAME TO "${p3.newName}";`;
-      case "addColumn": {
-        const isSerial = p3.autoIncrement && /^(INT|INTEGER|BIGINT)/i.test(p3.dataType ?? "");
-        let colType;
-        if (isSerial) {
-          colType = /^BIGINT/i.test(p3.dataType ?? "") ? "BIGSERIAL" : "SERIAL";
-        } else {
-          colType = p3.dataType ?? "VARCHAR(255)";
-        }
-        let sql = `ALTER TABLE "${p3.table}" ADD COLUMN "${p3.name}" ${colType}`;
-        if (!(p3.nullable ?? true)) sql += " NOT NULL";
-        if (p3.defaultValue != null && !isSerial) sql += ` DEFAULT ${p3.defaultValue}`;
-        if (p3.isUnique) sql += " UNIQUE";
-        return sql + ";";
-      }
-      case "dropColumn":
-        return `ALTER TABLE "${p3.table}" DROP COLUMN "${p3.name}";`;
-      case "renameColumn":
-        return `ALTER TABLE "${p3.table}" RENAME COLUMN "${p3.oldName}" TO "${p3.newName}";`;
-      case "modifyColumnType":
-        return `ALTER TABLE "${p3.table}" ALTER COLUMN "${p3.column}" TYPE ${p3.newType};`;
-      case "modifyColumnDefault":
-        return p3.newDefault != null ? `ALTER TABLE "${p3.table}" ALTER COLUMN "${p3.column}" SET DEFAULT ${p3.newDefault};` : `ALTER TABLE "${p3.table}" ALTER COLUMN "${p3.column}" DROP DEFAULT;`;
-      case "setColumnNullable":
-        return p3.nullable ? `ALTER TABLE "${p3.table}" ALTER COLUMN "${p3.column}" DROP NOT NULL;` : `ALTER TABLE "${p3.table}" ALTER COLUMN "${p3.column}" SET NOT NULL;`;
-      case "setColumnAutoIncrement": {
-        const seqName = `${p3.table}_${p3.column}_seq`;
-        if (p3.autoIncrement) {
-          return [
-            `CREATE SEQUENCE "${seqName}";`,
-            `ALTER TABLE "${p3.table}" ALTER COLUMN "${p3.column}" SET DEFAULT nextval('"${seqName}"');`,
-            `ALTER SEQUENCE "${seqName}" OWNED BY "${p3.table}"."${p3.column}";`
-          ].join("\n");
-        }
-        return `ALTER TABLE "${p3.table}" ALTER COLUMN "${p3.column}" DROP DEFAULT;`;
-      }
-      case "setColumnUnique":
-        if (p3.unique) {
-          const constraintName = `uq_${p3.table}_${p3.column}`;
-          return `ALTER TABLE "${p3.table}" ADD CONSTRAINT "${constraintName}" UNIQUE ("${p3.column}");`;
-        }
-        return `ALTER TABLE "${p3.table}" DROP CONSTRAINT IF EXISTS "uq_${p3.table}_${p3.column}";`;
-      case "addPrimaryKey": {
-        const cols = p3.columns.map((c3) => `"${c3}"`).join(", ");
-        return `ALTER TABLE "${p3.table}" ADD PRIMARY KEY (${cols});`;
-      }
-      case "dropPrimaryKey":
-        return `ALTER TABLE "${p3.table}" DROP CONSTRAINT "${p3.table}_pkey";`;
-      case "addForeignKey": {
-        const name = p3.name ?? `fk_${p3.table}_${p3.columns[0]}`;
-        const cols = p3.columns.map((c3) => `"${c3}"`).join(", ");
-        const refCols = p3.refColumns.map((c3) => `"${c3}"`).join(", ");
-        return `ALTER TABLE "${p3.table}" ADD CONSTRAINT "${name}" FOREIGN KEY (${cols}) REFERENCES "${p3.refTable}"(${refCols}) ON DELETE ${p3.onDelete} ON UPDATE ${p3.onUpdate};`;
-      }
-      case "dropForeignKey":
-        return `ALTER TABLE "${p3.table}" DROP CONSTRAINT IF EXISTS "${p3.name}";`;
-      case "addUniqueConstraint": {
-        const name = p3.name ?? `uq_${p3.table}_${p3.columns[0]}`;
-        const cols = p3.columns.map((c3) => `"${c3}"`).join(", ");
-        return `ALTER TABLE "${p3.table}" ADD CONSTRAINT "${name}" UNIQUE (${cols});`;
-      }
-      case "dropUniqueConstraint":
-        return `ALTER TABLE "${p3.table}" DROP CONSTRAINT IF EXISTS "${p3.name}";`;
-      case "createIndex": {
-        const unique = p3.unique ? "UNIQUE " : "";
-        const cols = p3.columns.map((c3) => `"${c3}"`).join(", ");
-        return `CREATE ${unique}INDEX "${p3.name}" ON "${p3.table}"(${cols});`;
-      }
-      case "dropIndex":
-        return `DROP INDEX IF EXISTS "${p3.name}";`;
-      default:
-        return `-- Unknown operation: ${op.type}`;
-    }
-  }
-  generateBatch(ops) {
-    return ops.map((op) => this.generate(op)).join("\n\n");
-  }
-};
-
-// src/features/migration/sql-generator/index.ts
-var generators = {
-  mysql: new MySQLGenerator(),
-  postgresql: new PostgreSQLGenerator()
-};
-function getSQLGenerator(dialect) {
-  return generators[dialect];
-}
-
-// src/store/slices/migration-slice.ts
-var createMigrationSlice = (set2, get2) => ({
-  migrationHistory: [],
-  uncommittedOps: [],
-  recordOperation: (type, params) => {
-    set2((state) => {
-      state.uncommittedOps.push({
-        id: generateId(),
-        type,
-        timestamp: Date.now(),
-        params
-      });
-    });
-  },
-  commitVersion: (title) => {
-    set2((state) => {
-      if (state.uncommittedOps.length === 0) return;
-      const version = {
-        id: generateId(),
-        version: String(state.migrationHistory.length + 1).padStart(3, "0"),
-        title,
-        date: (/* @__PURE__ */ new Date()).toISOString(),
-        operations: [...state.uncommittedOps]
-      };
-      state.migrationHistory.push(version);
-      state.uncommittedOps = [];
-    });
-  },
-  getVersionSQL: (versionId, dialect) => {
-    const state = get2();
-    const version = state.migrationHistory.find((v4) => v4.id === versionId);
-    if (!version) return "";
-    const generator = getSQLGenerator(dialect);
-    return `-- Migration: ${version.version} - ${version.title}
--- Date: ${version.date}
-
-${generator.generateBatch(version.operations)}`;
-  },
-  getUncommittedSQL: (dialect) => {
-    const state = get2();
-    if (state.uncommittedOps.length === 0) return "-- No uncommitted changes";
-    const generator = getSQLGenerator(dialect);
-    return `-- Uncommitted changes
-
-${generator.generateBatch(state.uncommittedOps)}`;
-  },
-  getAllMigrationsSQL: (dialect) => {
-    const state = get2();
-    const generator = getSQLGenerator(dialect);
-    const sections = state.migrationHistory.map(
-      (v4) => `-- Migration: ${v4.version} - ${v4.title}
--- Date: ${v4.date}
-
-${generator.generateBatch(v4.operations)}`
-    );
-    return sections.join("\n\n-- ========================================\n\n");
-  },
-  undoLastOperation: () => {
-    const state = get2();
-    const ops = state.uncommittedOps;
-    if (ops.length === 0) return null;
-    const lastOp = ops[ops.length - 1];
-    const inverse = generateInverse(lastOp);
-    set2((s3) => {
-      s3.uncommittedOps.pop();
-    });
-    return inverse;
-  }
-});
-
 // src/store/index.ts
 setAutoFreeze(false);
 var useStore2 = create()(
   immer2((...a3) => ({
     ...createSchemaSlice(...a3),
     ...createDiagramSlice(...a3),
-    ...createUISlice(...a3),
-    ...createMigrationSlice(...a3)
+    ...createUISlice(...a3)
   }))
 );
 
@@ -66579,7 +66183,7 @@ var RovingFocusGroupItem = React35.forwardRef(
     const {
       __scopeRovingFocusGroup,
       focusable = true,
-      active = false,
+      active: active2 = false,
       tabStopId,
       children,
       ...itemProps
@@ -66602,7 +66206,7 @@ var RovingFocusGroupItem = React35.forwardRef(
         scope: __scopeRovingFocusGroup,
         id,
         focusable,
-        active,
+        active: active2,
         children: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
           Primitive.span,
           {
@@ -71547,10 +71151,6 @@ function FileMenu() {
         nodePositions: state.nodePositions,
         collapsedNodes: state.collapsedNodes,
         viewport: state.viewport
-      },
-      migrations: {
-        versions: state.migrationHistory,
-        uncommittedOps: state.uncommittedOps
       }
     };
     const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
@@ -71580,12 +71180,6 @@ function FileMenu() {
               nodePositions: project.diagramState.nodePositions ?? {},
               collapsedNodes: project.diagramState.collapsedNodes ?? {},
               viewport: project.diagramState.viewport ?? { x: 0, y: 0, zoom: 1 }
-            });
-          }
-          if (project.migrations) {
-            useStore2.setState({
-              migrationHistory: project.migrations.versions ?? [],
-              uncommittedOps: project.migrations.uncommittedOps ?? []
             });
           }
           const n3 = Object.keys(project.schema?.tables ?? {}).length;
@@ -71637,18 +71231,121 @@ function FileMenu() {
   ] });
 }
 
+// src/store/history.ts
+var DEFAULT_CAP = 100;
+var DEFAULT_COALESCE_MS = 400;
+var useHistoryStore = create(() => ({
+  canUndo: false,
+  canRedo: false
+}));
+var active = null;
+function undo() {
+  return active ? active.undo() : false;
+}
+function redo() {
+  return active ? active.redo() : false;
+}
+function historyStatus() {
+  const s3 = active?.status() ?? { past: 0, future: 0 };
+  return { canUndo: s3.past > 0, canRedo: s3.future > 0, past: s3.past, future: s3.future };
+}
+function snap(s3) {
+  return {
+    tables: s3.tables,
+    relationships: s3.relationships,
+    nodePositions: s3.nodePositions,
+    collapsedNodes: s3.collapsedNodes,
+    dialect: s3.dialect
+  };
+}
+function durableChanged(a3, b3) {
+  return a3.tables !== b3.tables || a3.relationships !== b3.relationships || a3.nodePositions !== b3.nodePositions || a3.collapsedNodes !== b3.collapsedNodes || a3.dialect !== b3.dialect;
+}
+function createHistory(store, opts) {
+  const cap = opts?.cap ?? DEFAULT_CAP;
+  const coalesceMs = opts?.coalesceMs ?? DEFAULT_COALESCE_MS;
+  const now = opts?.now ?? (() => Date.now());
+  const past = [];
+  const future = [];
+  let baseline = snap(store.getState());
+  let applying = false;
+  let lastPushAt = -Infinity;
+  const sync = () => {
+    useHistoryStore.setState({ canUndo: past.length > 0, canRedo: future.length > 0 });
+  };
+  const apply = (doc) => {
+    applying = true;
+    try {
+      const st2 = store.getState();
+      st2.loadProject({ tables: doc.tables, relationships: doc.relationships });
+      const vp = st2.viewport;
+      st2.loadDiagramState({
+        nodePositions: doc.nodePositions,
+        collapsedNodes: doc.collapsedNodes,
+        viewport: vp
+      });
+      if (st2.dialect !== doc.dialect) st2.setDialect(doc.dialect);
+    } finally {
+      applying = false;
+    }
+    baseline = snap(store.getState());
+  };
+  const unsubscribe = store.subscribe((s3, p3) => {
+    if (applying) return;
+    if (!durableChanged(baseline, s3)) return;
+    const t3 = now();
+    if (t3 - lastPushAt > coalesceMs) {
+      past.push(baseline);
+      if (past.length > cap) past.shift();
+      future.length = 0;
+    }
+    lastPushAt = t3;
+    baseline = snap(s3);
+    sync();
+  });
+  const controller = {
+    undo() {
+      if (past.length === 0) return false;
+      future.push(snap(store.getState()));
+      const doc = past.pop();
+      apply(doc);
+      lastPushAt = -Infinity;
+      sync();
+      return true;
+    },
+    redo() {
+      if (future.length === 0) return false;
+      past.push(snap(store.getState()));
+      const doc = future.pop();
+      apply(doc);
+      lastPushAt = -Infinity;
+      sync();
+      return true;
+    },
+    canUndo: () => past.length > 0,
+    canRedo: () => future.length > 0,
+    status: () => ({ past: past.length, future: future.length }),
+    dispose() {
+      unsubscribe();
+      if (active === controller) active = null;
+    }
+  };
+  active = controller;
+  sync();
+  return controller;
+}
+
 // src/components/toolbar/EditMenu.tsx
 var import_jsx_runtime28 = __toESM(require_jsx_runtime(), 1);
 function EditMenu() {
   const selectedNodeIds = useStore2((s3) => s3.selectedNodeIds);
   const removeTable = useStore2((s3) => s3.removeTable);
+  const canUndo = useHistoryStore((s3) => s3.canUndo);
+  const canRedo = useHistoryStore((s3) => s3.canRedo);
   const handleDeleteSelected = () => {
     for (const id of selectedNodeIds) {
       removeTable(id);
     }
-  };
-  const handleUndo = () => {
-    useStore2.getState().undoLastOperation();
   };
   const handleSelectAll = () => {
     const tables = useStore2.getState().tables;
@@ -71657,11 +71354,11 @@ function EditMenu() {
   return /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(DropdownMenu2, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(DropdownMenuTrigger2, { asChild: true, children: /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(Button, { variant: "ghost", size: "xs", className: "text-gray-700 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-200", children: "Edit" }) }),
     /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(DropdownMenuContent2, { align: "start", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(DropdownMenuItem2, { onClick: handleUndo, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(DropdownMenuItem2, { disabled: !canUndo, onClick: () => undo(), children: [
         "Undo",
         /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(DropdownMenuShortcut, { children: "Ctrl+Z" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(DropdownMenuItem2, { disabled: true, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime28.jsxs)(DropdownMenuItem2, { disabled: !canRedo, onClick: () => redo(), children: [
         "Redo",
         /* @__PURE__ */ (0, import_jsx_runtime28.jsx)(DropdownMenuShortcut, { children: "Ctrl+Y" })
       ] }),
@@ -71819,6 +71516,8 @@ function Toolbar() {
   const zoom = useStore2((s3) => s3.viewport.zoom);
   const tables = useStore2((s3) => s3.tables);
   const setCreateTableDialogOpen = useStore2((s3) => s3.setCreateTableDialogOpen);
+  const canUndo = useHistoryStore((s3) => s3.canUndo);
+  const canRedo = useHistoryStore((s3) => s3.canRedo);
   const tableCount = Object.keys(tables).length;
   const zoomPct = Math.round(zoom * 100);
   return /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(TooltipProvider2, { delayDuration: 300, children: /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { className: "flex h-10 shrink-0 items-center justify-between border-b border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-2", children: [
@@ -71835,8 +71534,8 @@ function Toolbar() {
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { className: "flex items-center gap-0.5", children: [
       /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(QuickAction, { icon: Plus, label: "Add Table", node: "add-table", onClick: () => setCreateTableDialogOpen(true) }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(QuickAction, { icon: Undo2, label: "Undo", node: "undo", onClick: () => useStore2.getState().undoLastOperation() }),
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(QuickAction, { icon: Redo2, label: "Redo", disabled: true }),
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(QuickAction, { icon: Undo2, label: "Undo", node: "undo", disabled: !canUndo, onClick: () => undo() }),
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(QuickAction, { icon: Redo2, label: "Redo", node: "redo", disabled: !canRedo, onClick: () => redo() }),
       /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(QuickAction, { icon: LayoutDashboard, label: "Auto Layout", node: "auto-layout", onClick: () => useStore2.getState().triggerAutoLayout() }),
       /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(QuickAction, { icon: Maximize2, label: "Fit View", node: "fit-view", onClick: () => useStore2.getState().fitViewFn?.() })
     ] }),
@@ -72390,16 +72089,16 @@ function TableNavigator() {
     ),
     /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { className: "p-2", children: [
       /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { className: "mb-1.5 grid grid-cols-4 gap-1", children: ["1:N", "1:1", "1|N", "1|1"].map((mode) => {
-        const active = relationshipCreateMode === mode;
+        const active2 = relationshipCreateMode === mode;
         const slug = MODE_SLUG[mode];
         return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
           "button",
           {
             "data-node": `relmode/${slug}`,
-            onClick: () => setRelationshipCreateMode(active ? null : mode),
+            onClick: () => setRelationshipCreateMode(active2 ? null : mode),
             className: cn(
               "flex items-center justify-center gap-1 rounded px-1.5 py-1 text-[10px] font-semibold transition-colors",
-              active ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+              active2 ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
             ),
             title: `Create relationship mode: ${mode}`,
             children: [
@@ -73143,35 +72842,35 @@ var defaultScreenReaderInstructions = {
 var defaultAnnouncements = {
   onDragStart(_ref) {
     let {
-      active
+      active: active2
     } = _ref;
-    return "Picked up draggable item " + active.id + ".";
+    return "Picked up draggable item " + active2.id + ".";
   },
   onDragOver(_ref2) {
     let {
-      active,
+      active: active2,
       over
     } = _ref2;
     if (over) {
-      return "Draggable item " + active.id + " was moved over droppable area " + over.id + ".";
+      return "Draggable item " + active2.id + " was moved over droppable area " + over.id + ".";
     }
-    return "Draggable item " + active.id + " is no longer over a droppable area.";
+    return "Draggable item " + active2.id + " is no longer over a droppable area.";
   },
   onDragEnd(_ref3) {
     let {
-      active,
+      active: active2,
       over
     } = _ref3;
     if (over) {
-      return "Draggable item " + active.id + " was dropped over droppable area " + over.id;
+      return "Draggable item " + active2.id + " was dropped over droppable area " + over.id;
     }
-    return "Draggable item " + active.id + " was dropped.";
+    return "Draggable item " + active2.id + " was dropped.";
   },
   onDragCancel(_ref4) {
     let {
-      active
+      active: active2
     } = _ref4;
-    return "Dragging was cancelled. Draggable item " + active.id + " was dropped.";
+    return "Dragging was cancelled. Draggable item " + active2.id + " was dropped.";
   }
 };
 function Accessibility(_ref) {
@@ -73193,51 +72892,51 @@ function Accessibility(_ref) {
   useDndMonitor((0, import_react12.useMemo)(() => ({
     onDragStart(_ref2) {
       let {
-        active
+        active: active2
       } = _ref2;
       announce(announcements.onDragStart({
-        active
+        active: active2
       }));
     },
     onDragMove(_ref3) {
       let {
-        active,
+        active: active2,
         over
       } = _ref3;
       if (announcements.onDragMove) {
         announce(announcements.onDragMove({
-          active,
+          active: active2,
           over
         }));
       }
     },
     onDragOver(_ref4) {
       let {
-        active,
+        active: active2,
         over
       } = _ref4;
       announce(announcements.onDragOver({
-        active,
+        active: active2,
         over
       }));
     },
     onDragEnd(_ref5) {
       let {
-        active,
+        active: active2,
         over
       } = _ref5;
       announce(announcements.onDragEnd({
-        active,
+        active: active2,
         over
       }));
     },
     onDragCancel(_ref6) {
       let {
-        active,
+        active: active2,
         over
       } = _ref6;
       announce(announcements.onDragCancel({
-        active,
+        active: active2,
         over
       }));
     }
@@ -73963,7 +73662,7 @@ var KeyboardSensor = class {
   handleKeyDown(event) {
     if (isKeyboardEvent(event)) {
       const {
-        active,
+        active: active2,
         context: context2,
         options
       } = this.props;
@@ -73994,7 +73693,7 @@ var KeyboardSensor = class {
         this.referenceCoordinates = currentCoordinates;
       }
       const newCoordinates = coordinateGetter(event, {
-        active,
+        active: active2,
         context: context2.current,
         currentCoordinates
       });
@@ -74110,13 +73809,13 @@ KeyboardSensor.activators = [{
       onActivation
     } = _ref;
     let {
-      active
+      active: active2
     } = _ref2;
     const {
       code
     } = event.nativeEvent;
     if (keyboardCodes.start.includes(code)) {
-      const activator = active.activatorNode.current;
+      const activator = active2.activatorNode.current;
       if (activator && event.target !== activator) {
         return false;
       }
@@ -74227,10 +73926,10 @@ var AbstractPointerSensor = class {
   }
   handlePending(constraint, offset4) {
     const {
-      active,
+      active: active2,
       onPending
     } = this.props;
-    onPending(active, constraint, this.initialCoordinates, offset4);
+    onPending(active2, constraint, this.initialCoordinates, offset4);
   }
   handleStart() {
     const {
@@ -75292,12 +74991,12 @@ function RestoreFocus(_ref) {
     disabled
   } = _ref;
   const {
-    active,
+    active: active2,
     activatorEvent,
     draggableNodes
   } = (0, import_react12.useContext)(InternalContext);
   const previousActivatorEvent = usePrevious2(activatorEvent);
-  const previousActiveId = usePrevious2(active == null ? void 0 : active.id);
+  const previousActiveId = usePrevious2(active2 == null ? void 0 : active2.id);
   (0, import_react12.useEffect)(() => {
     if (disabled) {
       return;
@@ -75460,7 +75159,7 @@ var DndContext = /* @__PURE__ */ (0, import_react12.memo)(function DndContext2(_
     initial: null,
     translated: null
   });
-  const active = (0, import_react12.useMemo)(() => {
+  const active2 = (0, import_react12.useMemo)(() => {
     var _node$data;
     return activeId != null ? {
       id: activeId,
@@ -75531,7 +75230,7 @@ var DndContext = /* @__PURE__ */ (0, import_react12.memo)(function DndContext2(_
       scaleY: 1
     },
     activatorEvent,
-    active,
+    active: active2,
     activeNodeRect,
     containerNodeRect,
     draggingNodeRect,
@@ -75547,8 +75246,8 @@ var DndContext = /* @__PURE__ */ (0, import_react12.memo)(function DndContext2(_
   const activeNodeScrollDelta = useScrollOffsetsDelta(scrollOffsets, [activeNodeRect]);
   const scrollAdjustedTranslate = add(modifiedTranslate, scrollAdjustment);
   const collisionRect = draggingNodeRect ? getAdjustedRect(draggingNodeRect, modifiedTranslate) : null;
-  const collisions = active && collisionRect ? collisionDetection({
-    active,
+  const collisions = active2 && collisionRect ? collisionDetection({
+    active: active2,
     collisionRect,
     droppableRects,
     droppableContainers: enabledDroppableContainers,
@@ -75667,19 +75366,19 @@ var DndContext = /* @__PURE__ */ (0, import_react12.memo)(function DndContext2(_
       function createHandler(type) {
         return async function handler() {
           const {
-            active: active2,
+            active: active3,
             collisions: collisions2,
             over: over2,
             scrollAdjustedTranslate: scrollAdjustedTranslate2
           } = sensorContext.current;
           let event2 = null;
-          if (active2 && scrollAdjustedTranslate2) {
+          if (active3 && scrollAdjustedTranslate2) {
             const {
               cancelDrop
             } = latestProps.current;
             event2 = {
               activatorEvent: activatorEvent2,
-              active: active2,
+              active: active3,
               collisions: collisions2,
               delta: scrollAdjustedTranslate2,
               over: over2
@@ -75718,9 +75417,9 @@ var DndContext = /* @__PURE__ */ (0, import_react12.memo)(function DndContext2(_
     [draggableNodes]
   );
   const bindActivatorToSensorInstantiator = (0, import_react12.useCallback)((handler, sensor) => {
-    return (event, active2) => {
+    return (event, active3) => {
       const nativeEvent = event.nativeEvent;
-      const activeDraggableNode = draggableNodes.get(active2);
+      const activeDraggableNode = draggableNodes.get(active3);
       if (
         // Another sensor is already instantiating
         activeRef.current !== null || // No active draggable
@@ -75737,7 +75436,7 @@ var DndContext = /* @__PURE__ */ (0, import_react12.memo)(function DndContext2(_
         nativeEvent.dndKit = {
           capturedBy: sensor.sensor
         };
-        activeRef.current = active2;
+        activeRef.current = active3;
         instantiateSensor(event, sensor);
       }
     };
@@ -75755,16 +75454,16 @@ var DndContext = /* @__PURE__ */ (0, import_react12.memo)(function DndContext2(_
         onDragMove
       } = latestProps.current;
       const {
-        active: active2,
+        active: active3,
         activatorEvent: activatorEvent2,
         collisions: collisions2,
         over: over2
       } = sensorContext.current;
-      if (!active2 || !activatorEvent2) {
+      if (!active3 || !activatorEvent2) {
         return;
       }
       const event = {
-        active: active2,
+        active: active3,
         activatorEvent: activatorEvent2,
         collisions: collisions2,
         delta: {
@@ -75787,13 +75486,13 @@ var DndContext = /* @__PURE__ */ (0, import_react12.memo)(function DndContext2(_
   (0, import_react12.useEffect)(
     () => {
       const {
-        active: active2,
+        active: active3,
         activatorEvent: activatorEvent2,
         collisions: collisions2,
         droppableContainers: droppableContainers2,
         scrollAdjustedTranslate: scrollAdjustedTranslate2
       } = sensorContext.current;
-      if (!active2 || activeRef.current == null || !activatorEvent2 || !scrollAdjustedTranslate2) {
+      if (!active3 || activeRef.current == null || !activatorEvent2 || !scrollAdjustedTranslate2) {
         return;
       }
       const {
@@ -75807,7 +75506,7 @@ var DndContext = /* @__PURE__ */ (0, import_react12.memo)(function DndContext2(_
         disabled: overContainer.disabled
       } : null;
       const event = {
-        active: active2,
+        active: active3,
         activatorEvent: activatorEvent2,
         collisions: collisions2,
         delta: {
@@ -75831,7 +75530,7 @@ var DndContext = /* @__PURE__ */ (0, import_react12.memo)(function DndContext2(_
   useIsomorphicLayoutEffect2(() => {
     sensorContext.current = {
       activatorEvent,
-      active,
+      active: active2,
       activeNode,
       collisionRect,
       collisions,
@@ -75848,7 +75547,7 @@ var DndContext = /* @__PURE__ */ (0, import_react12.memo)(function DndContext2(_
       initial: draggingNodeRect,
       translated: collisionRect
     };
-  }, [active, activeNode, collisions, collisionRect, draggableNodes, draggingNode, draggingNodeRect, droppableRects, droppableContainers, over, scrollableAncestors, scrollAdjustedTranslate]);
+  }, [active2, activeNode, collisions, collisionRect, draggableNodes, draggingNode, draggingNodeRect, droppableRects, droppableContainers, over, scrollableAncestors, scrollAdjustedTranslate]);
   useAutoScroller({
     ...autoScrollOptions,
     delta: translate,
@@ -75859,7 +75558,7 @@ var DndContext = /* @__PURE__ */ (0, import_react12.memo)(function DndContext2(_
   });
   const publicContext = (0, import_react12.useMemo)(() => {
     const context2 = {
-      active,
+      active: active2,
       activeNode,
       activeNodeRect,
       activatorEvent,
@@ -75878,12 +75577,12 @@ var DndContext = /* @__PURE__ */ (0, import_react12.memo)(function DndContext2(_
       windowRect
     };
     return context2;
-  }, [active, activeNode, activeNodeRect, activatorEvent, collisions, containerNodeRect, dragOverlay, draggableNodes, droppableContainers, droppableRects, over, measureDroppableContainers, scrollableAncestors, scrollableAncestorRects, measuringConfiguration, measuringScheduled, windowRect]);
+  }, [active2, activeNode, activeNodeRect, activatorEvent, collisions, containerNodeRect, dragOverlay, draggableNodes, droppableContainers, droppableRects, over, measureDroppableContainers, scrollableAncestors, scrollableAncestorRects, measuringConfiguration, measuringScheduled, windowRect]);
   const internalContext = (0, import_react12.useMemo)(() => {
     const context2 = {
       activatorEvent,
       activators,
-      active,
+      active: active2,
       activeNodeRect,
       ariaDescribedById: {
         draggable: draggableDescribedById
@@ -75894,7 +75593,7 @@ var DndContext = /* @__PURE__ */ (0, import_react12.memo)(function DndContext2(_
       measureDroppableContainers
     };
     return context2;
-  }, [activatorEvent, activators, active, activeNodeRect, dispatch, draggableDescribedById, draggableNodes, over, measureDroppableContainers]);
+  }, [activatorEvent, activators, active2, activeNodeRect, dispatch, draggableDescribedById, draggableNodes, over, measureDroppableContainers]);
   return import_react12.default.createElement(DndMonitorContext.Provider, {
     value: registerMonitorListener
   }, import_react12.default.createElement(InternalContext.Provider, {
@@ -75938,7 +75637,7 @@ function useDraggable(_ref) {
   const {
     activators,
     activatorEvent,
-    active,
+    active: active2,
     activeNodeRect,
     ariaDescribedById,
     draggableNodes,
@@ -75949,7 +75648,7 @@ function useDraggable(_ref) {
     roleDescription = "draggable",
     tabIndex = 0
   } = attributes != null ? attributes : {};
-  const isDragging = (active == null ? void 0 : active.id) === id;
+  const isDragging = (active2 == null ? void 0 : active2.id) === id;
   const transform = (0, import_react12.useContext)(isDragging ? ActiveDraggableContext : NullContext);
   const [node, setNodeRef] = useNodeRef();
   const [activatorNode, setActivatorNodeRef] = useNodeRef();
@@ -75983,7 +75682,7 @@ function useDraggable(_ref) {
     "aria-describedby": ariaDescribedById.draggable
   }), [disabled, role, tabIndex, isDragging, roleDescription, ariaDescribedById.draggable]);
   return {
-    active,
+    active: active2,
     activatorEvent,
     activeNodeRect,
     attributes: memoizedAttributes,
@@ -76012,7 +75711,7 @@ function useDroppable(_ref) {
   } = _ref;
   const key = useUniqueId(ID_PREFIX$1);
   const {
-    active,
+    active: active2,
     dispatch,
     over,
     measureDroppableContainers
@@ -76051,7 +75750,7 @@ function useDroppable(_ref) {
   );
   const resizeObserver = useResizeObserver2({
     callback: handleResize,
-    disabled: resizeObserverDisabled || !active
+    disabled: resizeObserverDisabled || !active2
   });
   const handleNodeChange = (0, import_react12.useCallback)((newElement, previousElement) => {
     if (!resizeObserver) {
@@ -76109,7 +75808,7 @@ function useDroppable(_ref) {
     }
   }, [id, key, disabled, dispatch]);
   return {
-    active,
+    active: active2,
     rect,
     isOver: (over == null ? void 0 : over.id) === id,
     node: nodeRef,
@@ -76265,7 +75964,7 @@ function SortableContext(_ref) {
     disabled: disabledProp = false
   } = _ref;
   const {
-    active,
+    active: active2,
     dragOverlay,
     droppableRects,
     over,
@@ -76274,8 +75973,8 @@ function SortableContext(_ref) {
   const containerId = useUniqueId(ID_PREFIX2, id);
   const useDragOverlay = Boolean(dragOverlay.rect !== null);
   const items = (0, import_react13.useMemo)(() => userDefinedItems.map((item) => typeof item === "object" && "id" in item ? item.id : item), [userDefinedItems]);
-  const isDragging = active != null;
-  const activeIndex = active ? items.indexOf(active.id) : -1;
+  const isDragging = active2 != null;
+  const activeIndex = active2 ? items.indexOf(active2.id) : -1;
   const overIndex = over ? items.indexOf(over.id) : -1;
   const previousItemsRef = (0, import_react13.useRef)(items);
   const itemsHaveChanged = !itemsEqual(items, previousItemsRef.current);
@@ -76440,7 +76139,7 @@ function useSortable(_ref) {
     }
   });
   const {
-    active,
+    active: active2,
     activatorEvent,
     activeNodeRect,
     attributes,
@@ -76460,7 +76159,7 @@ function useSortable(_ref) {
     disabled: disabled.draggable
   });
   const setNodeRef = useCombinedRefs(setDroppableNodeRef, setDraggableNodeRef);
-  const isSorting = Boolean(active);
+  const isSorting = Boolean(active2);
   const displaceItem = isSorting && !disableTransforms && isValidIndex(activeIndex) && isValidIndex(overIndex);
   const shouldDisplaceDragSource = !useDragOverlay && isDragging;
   const dragSourceDisplacement = shouldDisplaceDragSource && displaceItem ? transform : null;
@@ -76478,7 +76177,7 @@ function useSortable(_ref) {
     activeIndex,
     overIndex
   }) : index2;
-  const activeId = active == null ? void 0 : active.id;
+  const activeId = active2 == null ? void 0 : active2.id;
   const previous = (0, import_react13.useRef)({
     activeId,
     items,
@@ -76487,7 +76186,7 @@ function useSortable(_ref) {
   });
   const itemsHaveChanged = items !== previous.current.items;
   const shouldAnimateLayoutChanges = animateLayoutChanges({
-    active,
+    active: active2,
     containerId,
     isDragging,
     isSorting,
@@ -76531,7 +76230,7 @@ function useSortable(_ref) {
     return () => clearTimeout(timeoutId);
   }, [activeId]);
   return {
-    active,
+    active: active2,
     activeIndex,
     attributes,
     data,
@@ -76817,9 +76516,9 @@ function ColumnEditor({ tableId, columns }) {
   );
   const handleDragEnd = (0, import_react14.useCallback)(
     (event) => {
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-      const oldIndex = columns.findIndex((c3) => c3.id === active.id);
+      const { active: active2, over } = event;
+      if (!over || active2.id === over.id) return;
+      const oldIndex = columns.findIndex((c3) => c3.id === active2.id);
       const newIndex = columns.findIndex((c3) => c3.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
       const newOrder = arrayMove(columns.map((c3) => c3.id), oldIndex, newIndex);
@@ -83719,15 +83418,15 @@ var ACCENT = {
   error: "border-l-red-500 text-red-400"
 };
 function Toaster() {
-  const active = useToastStore((s3) => s3.active);
+  const active2 = useToastStore((s3) => s3.active);
   const dismiss = useToastStore((s3) => s3.dismiss);
-  if (active.length === 0) return null;
+  if (active2.length === 0) return null;
   return /* @__PURE__ */ (0, import_jsx_runtime56.jsx)(
     "div",
     {
       className: "pointer-events-none absolute right-3 top-3 z-[100] flex w-72 flex-col gap-2",
       "data-node": "toaster",
-      children: active.map((t3) => {
+      children: active2.map((t3) => {
         const Icon2 = ICON[t3.severity];
         return /* @__PURE__ */ (0, import_jsx_runtime56.jsxs)(
           "div",
@@ -87883,6 +87582,113 @@ function parse3(input) {
   return new Parser(input).parse();
 }
 
+// src/features/migration/operations/inverse.ts
+function generateInverse(op) {
+  const p3 = op.params;
+  switch (op.type) {
+    case "createTable":
+      return {
+        ...op,
+        type: "dropTable",
+        params: { name: p3.name, _tableData: op.params }
+      };
+    case "dropTable":
+      return p3._tableData ? { ...op, type: "createTable", params: p3._tableData } : null;
+    case "renameTable":
+      return {
+        ...op,
+        type: "renameTable",
+        params: { oldName: p3.newName, newName: p3.oldName }
+      };
+    case "addColumn":
+      return {
+        ...op,
+        type: "dropColumn",
+        params: { table: p3.table, name: p3.name, _columnData: op.params }
+      };
+    case "dropColumn":
+      return p3._columnData ? { ...op, type: "addColumn", params: p3._columnData } : null;
+    case "renameColumn":
+      return {
+        ...op,
+        type: "renameColumn",
+        params: { table: p3.table, oldName: p3.newName, newName: p3.oldName }
+      };
+    case "modifyColumnType":
+      return {
+        ...op,
+        type: "modifyColumnType",
+        params: { table: p3.table, column: p3.column, oldType: p3.newType, newType: p3.oldType }
+      };
+    case "modifyColumnDefault":
+      return {
+        ...op,
+        type: "modifyColumnDefault",
+        params: { table: p3.table, column: p3.column, oldDefault: p3.newDefault, newDefault: p3.oldDefault }
+      };
+    case "setColumnNullable":
+      return {
+        ...op,
+        type: "setColumnNullable",
+        params: { table: p3.table, column: p3.column, nullable: p3.oldNullable, oldNullable: p3.nullable }
+      };
+    case "setColumnAutoIncrement":
+      return {
+        ...op,
+        type: "setColumnAutoIncrement",
+        params: { table: p3.table, column: p3.column, autoIncrement: !p3.autoIncrement }
+      };
+    case "setColumnUnique":
+      return {
+        ...op,
+        type: "setColumnUnique",
+        params: { table: p3.table, column: p3.column, unique: !p3.unique }
+      };
+    case "addPrimaryKey":
+      return {
+        ...op,
+        type: "dropPrimaryKey",
+        params: { table: p3.table, columns: p3.columns }
+      };
+    case "dropPrimaryKey":
+      return {
+        ...op,
+        type: "addPrimaryKey",
+        params: { table: p3.table, columns: p3.columns }
+      };
+    case "addForeignKey": {
+      const fkName = p3.name ?? `fk_${p3.table}_${p3.columns[0]}`;
+      return {
+        ...op,
+        type: "dropForeignKey",
+        params: { table: p3.table, name: fkName, _fkData: op.params }
+      };
+    }
+    case "dropForeignKey":
+      return p3._fkData ? { ...op, type: "addForeignKey", params: p3._fkData } : null;
+    case "addUniqueConstraint": {
+      const uqName = p3.name ?? `uq_${p3.table}_${p3.columns[0]}`;
+      return {
+        ...op,
+        type: "dropUniqueConstraint",
+        params: { table: p3.table, name: uqName, columns: p3.columns }
+      };
+    }
+    case "dropUniqueConstraint":
+      return p3.columns ? { ...op, type: "addUniqueConstraint", params: { table: p3.table, name: p3.name, columns: p3.columns } } : null;
+    case "createIndex":
+      return {
+        ...op,
+        type: "dropIndex",
+        params: { table: p3.table, name: p3.name, _indexData: op.params }
+      };
+    case "dropIndex":
+      return p3._indexData ? { ...op, type: "createIndex", params: p3._indexData } : null;
+    default:
+      return null;
+  }
+}
+
 // src/features/migration/mig-dsl/serializer.ts
 var INDENT = "  ";
 function serializeColumnDef(c3) {
@@ -88272,6 +88078,224 @@ function applyOperation(schema, op) {
   return next;
 }
 
+// src/features/migration/sql-generator/mysql-generator.ts
+var MySQLGenerator = class {
+  dialect = "mysql";
+  generate(op) {
+    const p3 = op.params;
+    switch (op.type) {
+      case "createTable": {
+        const columns = p3.columns ?? [];
+        const colDefs = columns.map((c3) => {
+          let def = `  \`${c3.name}\` ${c3.dataType}`;
+          if (c3.length) def += `(${c3.length})`;
+          if (c3.autoIncrement) def += " AUTO_INCREMENT";
+          if (!c3.nullable) def += " NOT NULL";
+          if (c3.defaultValue != null) def += ` DEFAULT ${c3.defaultValue}`;
+          if (c3.isUnique) def += " UNIQUE";
+          if (c3.comment) def += ` COMMENT '${c3.comment}'`;
+          return def;
+        });
+        const pks = columns.filter((c3) => c3.isPrimaryKey).map((c3) => `\`${c3.name}\``);
+        if (pks.length > 0) colDefs.push(`  PRIMARY KEY (${pks.join(", ")})`);
+        let sql = `CREATE TABLE \`${p3.name}\` (
+${colDefs.join(",\n")}
+)`;
+        if (p3.engine) sql += ` ENGINE=${p3.engine}`;
+        if (p3.charset) sql += ` DEFAULT CHARSET=${p3.charset}`;
+        if (p3.comment) sql += ` COMMENT='${p3.comment}'`;
+        return sql + ";";
+      }
+      case "dropTable":
+        return `DROP TABLE IF EXISTS \`${p3.name}\`;`;
+      case "renameTable":
+        return `ALTER TABLE \`${p3.oldName}\` RENAME TO \`${p3.newName}\`;`;
+      case "addColumn": {
+        let sql = `ALTER TABLE \`${p3.table}\` ADD COLUMN \`${p3.name}\` ${p3.dataType ?? "VARCHAR(255)"}`;
+        if (!(p3.nullable ?? true)) sql += " NOT NULL";
+        if (p3.defaultValue != null) sql += ` DEFAULT ${p3.defaultValue}`;
+        if (p3.autoIncrement) sql += " AUTO_INCREMENT";
+        if (p3.isUnique) sql += " UNIQUE";
+        if (p3.after) sql += ` AFTER \`${p3.after}\``;
+        return sql + ";";
+      }
+      case "dropColumn":
+        return `ALTER TABLE \`${p3.table}\` DROP COLUMN \`${p3.name}\`;`;
+      case "renameColumn":
+        return `ALTER TABLE \`${p3.table}\` RENAME COLUMN \`${p3.oldName}\` TO \`${p3.newName}\`;`;
+      case "modifyColumnType":
+        return `ALTER TABLE \`${p3.table}\` MODIFY COLUMN \`${p3.column}\` ${p3.newType};`;
+      case "modifyColumnDefault":
+        return p3.newDefault != null ? `ALTER TABLE \`${p3.table}\` ALTER COLUMN \`${p3.column}\` SET DEFAULT ${p3.newDefault};` : `ALTER TABLE \`${p3.table}\` ALTER COLUMN \`${p3.column}\` DROP DEFAULT;`;
+      case "setColumnNullable":
+        return p3.nullable ? `ALTER TABLE \`${p3.table}\` MODIFY COLUMN \`${p3.column}\` NULL;` : `ALTER TABLE \`${p3.table}\` MODIFY COLUMN \`${p3.column}\` NOT NULL;`;
+      case "setColumnAutoIncrement":
+        return p3.autoIncrement ? `ALTER TABLE \`${p3.table}\` MODIFY COLUMN \`${p3.column}\` AUTO_INCREMENT;` : `ALTER TABLE \`${p3.table}\` MODIFY COLUMN \`${p3.column}\`;`;
+      case "setColumnUnique":
+        return p3.unique ? `ALTER TABLE \`${p3.table}\` ADD UNIQUE (\`${p3.column}\`);` : `ALTER TABLE \`${p3.table}\` DROP INDEX \`${p3.column}\`;`;
+      case "addPrimaryKey": {
+        const cols = p3.columns.map((c3) => `\`${c3}\``).join(", ");
+        return `ALTER TABLE \`${p3.table}\` ADD PRIMARY KEY (${cols});`;
+      }
+      case "dropPrimaryKey":
+        return `ALTER TABLE \`${p3.table}\` DROP PRIMARY KEY;`;
+      case "addForeignKey": {
+        const name = p3.name ?? `fk_${p3.table}_${p3.columns[0]}`;
+        const cols = p3.columns.map((c3) => `\`${c3}\``).join(", ");
+        const refCols = p3.refColumns.map((c3) => `\`${c3}\``).join(", ");
+        return `ALTER TABLE \`${p3.table}\` ADD CONSTRAINT \`${name}\` FOREIGN KEY (${cols}) REFERENCES \`${p3.refTable}\`(${refCols}) ON DELETE ${p3.onDelete} ON UPDATE ${p3.onUpdate};`;
+      }
+      case "dropForeignKey":
+        return `ALTER TABLE \`${p3.table}\` DROP FOREIGN KEY \`${p3.name}\`;`;
+      case "addUniqueConstraint": {
+        const name = p3.name ?? `uq_${p3.table}_${p3.columns[0]}`;
+        const cols = p3.columns.map((c3) => `\`${c3}\``).join(", ");
+        return `ALTER TABLE \`${p3.table}\` ADD CONSTRAINT \`${name}\` UNIQUE (${cols});`;
+      }
+      case "dropUniqueConstraint":
+        return `ALTER TABLE \`${p3.table}\` DROP INDEX \`${p3.name}\`;`;
+      case "createIndex": {
+        const unique = p3.unique ? "UNIQUE " : "";
+        const cols = p3.columns.map((c3) => `\`${c3}\``).join(", ");
+        return `CREATE ${unique}INDEX \`${p3.name}\` ON \`${p3.table}\`(${cols});`;
+      }
+      case "dropIndex":
+        return `DROP INDEX \`${p3.name}\` ON \`${p3.table}\`;`;
+      default:
+        return `-- Unknown operation: ${op.type}`;
+    }
+  }
+  generateBatch(ops) {
+    return ops.map((op) => this.generate(op)).join("\n\n");
+  }
+};
+
+// src/features/migration/sql-generator/postgresql-generator.ts
+var PostgreSQLGenerator = class {
+  dialect = "postgresql";
+  generate(op) {
+    const p3 = op.params;
+    switch (op.type) {
+      case "createTable": {
+        const columns = p3.columns ?? [];
+        const colDefs = columns.map((c3) => {
+          const isSerial = c3.autoIncrement && /^(INT|INTEGER|BIGINT)/i.test(c3.dataType);
+          let def;
+          if (isSerial) {
+            const serialType = /^BIGINT/i.test(c3.dataType) ? "BIGSERIAL" : "SERIAL";
+            def = `  "${c3.name}" ${serialType}`;
+          } else {
+            def = `  "${c3.name}" ${c3.dataType}`;
+            if (c3.length) def += `(${c3.length})`;
+          }
+          if (!c3.nullable) def += " NOT NULL";
+          if (c3.defaultValue != null && !isSerial) def += ` DEFAULT ${c3.defaultValue}`;
+          if (c3.isUnique) def += " UNIQUE";
+          return def;
+        });
+        const pks = columns.filter((c3) => c3.isPrimaryKey).map((c3) => `"${c3.name}"`);
+        if (pks.length > 0) colDefs.push(`  PRIMARY KEY (${pks.join(", ")})`);
+        const schemaPrefix = p3.schema ? `"${p3.schema}".` : "";
+        let sql = `CREATE TABLE ${schemaPrefix}"${p3.name}" (
+${colDefs.join(",\n")}
+)`;
+        if (p3.comment) sql += `;
+COMMENT ON TABLE ${schemaPrefix}"${p3.name}" IS '${p3.comment}'`;
+        return sql + ";";
+      }
+      case "dropTable": {
+        const schemaPrefix = p3.schema ? `"${p3.schema}".` : "";
+        return `DROP TABLE IF EXISTS ${schemaPrefix}"${p3.name}" CASCADE;`;
+      }
+      case "renameTable":
+        return `ALTER TABLE "${p3.oldName}" RENAME TO "${p3.newName}";`;
+      case "addColumn": {
+        const isSerial = p3.autoIncrement && /^(INT|INTEGER|BIGINT)/i.test(p3.dataType ?? "");
+        let colType;
+        if (isSerial) {
+          colType = /^BIGINT/i.test(p3.dataType ?? "") ? "BIGSERIAL" : "SERIAL";
+        } else {
+          colType = p3.dataType ?? "VARCHAR(255)";
+        }
+        let sql = `ALTER TABLE "${p3.table}" ADD COLUMN "${p3.name}" ${colType}`;
+        if (!(p3.nullable ?? true)) sql += " NOT NULL";
+        if (p3.defaultValue != null && !isSerial) sql += ` DEFAULT ${p3.defaultValue}`;
+        if (p3.isUnique) sql += " UNIQUE";
+        return sql + ";";
+      }
+      case "dropColumn":
+        return `ALTER TABLE "${p3.table}" DROP COLUMN "${p3.name}";`;
+      case "renameColumn":
+        return `ALTER TABLE "${p3.table}" RENAME COLUMN "${p3.oldName}" TO "${p3.newName}";`;
+      case "modifyColumnType":
+        return `ALTER TABLE "${p3.table}" ALTER COLUMN "${p3.column}" TYPE ${p3.newType};`;
+      case "modifyColumnDefault":
+        return p3.newDefault != null ? `ALTER TABLE "${p3.table}" ALTER COLUMN "${p3.column}" SET DEFAULT ${p3.newDefault};` : `ALTER TABLE "${p3.table}" ALTER COLUMN "${p3.column}" DROP DEFAULT;`;
+      case "setColumnNullable":
+        return p3.nullable ? `ALTER TABLE "${p3.table}" ALTER COLUMN "${p3.column}" DROP NOT NULL;` : `ALTER TABLE "${p3.table}" ALTER COLUMN "${p3.column}" SET NOT NULL;`;
+      case "setColumnAutoIncrement": {
+        const seqName = `${p3.table}_${p3.column}_seq`;
+        if (p3.autoIncrement) {
+          return [
+            `CREATE SEQUENCE "${seqName}";`,
+            `ALTER TABLE "${p3.table}" ALTER COLUMN "${p3.column}" SET DEFAULT nextval('"${seqName}"');`,
+            `ALTER SEQUENCE "${seqName}" OWNED BY "${p3.table}"."${p3.column}";`
+          ].join("\n");
+        }
+        return `ALTER TABLE "${p3.table}" ALTER COLUMN "${p3.column}" DROP DEFAULT;`;
+      }
+      case "setColumnUnique":
+        if (p3.unique) {
+          const constraintName = `uq_${p3.table}_${p3.column}`;
+          return `ALTER TABLE "${p3.table}" ADD CONSTRAINT "${constraintName}" UNIQUE ("${p3.column}");`;
+        }
+        return `ALTER TABLE "${p3.table}" DROP CONSTRAINT IF EXISTS "uq_${p3.table}_${p3.column}";`;
+      case "addPrimaryKey": {
+        const cols = p3.columns.map((c3) => `"${c3}"`).join(", ");
+        return `ALTER TABLE "${p3.table}" ADD PRIMARY KEY (${cols});`;
+      }
+      case "dropPrimaryKey":
+        return `ALTER TABLE "${p3.table}" DROP CONSTRAINT "${p3.table}_pkey";`;
+      case "addForeignKey": {
+        const name = p3.name ?? `fk_${p3.table}_${p3.columns[0]}`;
+        const cols = p3.columns.map((c3) => `"${c3}"`).join(", ");
+        const refCols = p3.refColumns.map((c3) => `"${c3}"`).join(", ");
+        return `ALTER TABLE "${p3.table}" ADD CONSTRAINT "${name}" FOREIGN KEY (${cols}) REFERENCES "${p3.refTable}"(${refCols}) ON DELETE ${p3.onDelete} ON UPDATE ${p3.onUpdate};`;
+      }
+      case "dropForeignKey":
+        return `ALTER TABLE "${p3.table}" DROP CONSTRAINT IF EXISTS "${p3.name}";`;
+      case "addUniqueConstraint": {
+        const name = p3.name ?? `uq_${p3.table}_${p3.columns[0]}`;
+        const cols = p3.columns.map((c3) => `"${c3}"`).join(", ");
+        return `ALTER TABLE "${p3.table}" ADD CONSTRAINT "${name}" UNIQUE (${cols});`;
+      }
+      case "dropUniqueConstraint":
+        return `ALTER TABLE "${p3.table}" DROP CONSTRAINT IF EXISTS "${p3.name}";`;
+      case "createIndex": {
+        const unique = p3.unique ? "UNIQUE " : "";
+        const cols = p3.columns.map((c3) => `"${c3}"`).join(", ");
+        return `CREATE ${unique}INDEX "${p3.name}" ON "${p3.table}"(${cols});`;
+      }
+      case "dropIndex":
+        return `DROP INDEX IF EXISTS "${p3.name}";`;
+      default:
+        return `-- Unknown operation: ${op.type}`;
+    }
+  }
+  generateBatch(ops) {
+    return ops.map((op) => this.generate(op)).join("\n\n");
+  }
+};
+
+// src/features/migration/sql-generator/index.ts
+var generators = {
+  mysql: new MySQLGenerator(),
+  postgresql: new PostgreSQLGenerator()
+};
+function getSQLGenerator(dialect) {
+  return generators[dialect];
+}
+
 // src/features/migration/diff.ts
 function mkOp(type, params) {
   return { id: generateId(), type, timestamp: 0, params };
@@ -88472,10 +88496,10 @@ function deepSnapshot(store) {
     relationships: structuredClone(s3.relationships)
   };
 }
-function restoreSnapshot(store, snap) {
+function restoreSnapshot(store, snap2) {
   store.getState().loadProject({
-    tables: structuredClone(snap.tables),
-    relationships: structuredClone(snap.relationships)
+    tables: structuredClone(snap2.tables),
+    relationships: structuredClone(snap2.relationships)
   });
 }
 function loadParsedSchema(store, parsed, mode) {
@@ -88985,12 +89009,6 @@ function registerCommands(ctx, store) {
     if (anyFailed) {
       return { ok: false, code: "BATCH_FAILED", message: "batch completed with failures", failedAt, results };
     }
-    if (p3.title && typeof store.getState().commitVersion === "function") {
-      try {
-        store.getState().commitVersion(p3.title);
-      } catch {
-      }
-    }
     return { ok: true, results };
   }, {
     ops: { type: "json", required: true, description: "Array of operations to execute ([{ command, params }])" },
@@ -89000,14 +89018,16 @@ function registerCommands(ctx, store) {
     { cmd: cmd("get-schema"), why: "\uC801\uC6A9\uB41C \uC2A4\uD0A4\uB9C8\uB97C \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" },
     { cmd: cmd("validate"), why: "\uBB34\uACB0\uC131\uC744 \uAC80\uC99D\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4" }
   ]);
-  add2("undo", "Revert the last uncommitted operation using the migration slice", { ko: "\uC2E4\uD589 \uCDE8\uC18C \uB418\uB3CC\uB9AC\uAE30 undo" }, () => "\uC2E4\uD589\uC744 \uCDE8\uC18C\uD588\uC2B5\uB2C8\uB2E4", () => {
-    const fn = store.getState().undoLastOperation;
-    if (typeof fn !== "function") return { ok: false, code: "UNAVAILABLE", message: "undo not available" };
-    const inverse = fn();
-    return { ok: true, inverse };
+  add2("undo", "Revert the last document change (snapshot history)", { ko: "\uC2E4\uD589 \uCDE8\uC18C \uB418\uB3CC\uB9AC\uAE30 undo" }, (d3) => d3.undone ? "\uC2E4\uD589\uC744 \uCDE8\uC18C\uD588\uC2B5\uB2C8\uB2E4" : "\uB418\uB3CC\uB9B4 \uBCC0\uACBD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4", () => {
+    const undone = undo();
+    return { ok: true, undone, ...historyStatus() };
   });
-  add2("redo", "Re-apply the last undone operation (stub; wiring deferred to P3/P4)", { ko: "\uB2E4\uC2DC \uC2E4\uD589 redo \uBCF5\uC6D0" }, () => "\uB2E4\uC2DC \uC2E4\uD589\uD588\uC2B5\uB2C8\uB2E4", () => {
-    return { ok: true, noop: true, todo: "redo wiring deferred to P3/P4" };
+  add2("redo", "Re-apply the last undone document change (snapshot history)", { ko: "\uB2E4\uC2DC \uC2E4\uD589 redo \uBCF5\uC6D0" }, (d3) => d3.redone ? "\uB2E4\uC2DC \uC2E4\uD589\uD588\uC2B5\uB2C8\uB2E4" : "\uB2E4\uC2DC \uC2E4\uD589\uD560 \uBCC0\uACBD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4", () => {
+    const redone = redo();
+    return { ok: true, redone, ...historyStatus() };
+  });
+  add2("history-status", "Report undo/redo availability and stack depth (snapshot history)", { ko: "\uC774\uB825 \uC0C1\uD0DC \uC2E4\uD589\uCDE8\uC18C \uB2E4\uC2DC\uC2E4\uD589 \uAE4A\uC774 \uD655\uC778" }, (d3) => `undo ${d3.past ?? 0} \xB7 redo ${d3.future ?? 0}`, () => {
+    return { ok: true, ...historyStatus() };
   });
   add2("auto-layout", "Compute and apply automatic table positions using the dagre graph layout algorithm", { ko: "\uC790\uB3D9 \uBC30\uCE58 \uB808\uC774\uC544\uC6C3 dagre \uC704\uCE58 \uC815\uB82C" }, (d3) => `${d3.count ?? 0}\uAC1C \uD14C\uC774\uBE14\uC744 \uBC30\uCE58\uD588\uC2B5\uB2C8\uB2E4`, (p3) => {
     const schema = snapshotSchema(store);
@@ -89439,7 +89459,7 @@ function createPersistence(kv, store) {
       void flushNow();
     }, FLUSH_DEBOUNCE_MS);
   };
-  const durableChanged = (s3, p3) => s3.tables !== p3.tables || s3.relationships !== p3.relationships || s3.nodePositions !== p3.nodePositions || s3.collapsedNodes !== p3.collapsedNodes || s3.viewport !== p3.viewport || s3.dialect !== p3.dialect;
+  const durableChanged2 = (s3, p3) => s3.tables !== p3.tables || s3.relationships !== p3.relationships || s3.nodePositions !== p3.nodePositions || s3.collapsedNodes !== p3.collapsedNodes || s3.viewport !== p3.viewport || s3.dialect !== p3.dialect;
   const readDoc = async () => {
     const raw = await kv.get(PERSIST_KEY);
     if (raw == null) return null;
@@ -89495,7 +89515,7 @@ function createPersistence(kv, store) {
     if (kv && !disabled) {
       unsubscribe = store.subscribe((s3, p3) => {
         if (applying) return;
-        if (!durableChanged(s3, p3)) return;
+        if (!durableChanged2(s3, p3)) return;
         dirty = true;
         scheduleFlush();
       });
@@ -89868,6 +89888,8 @@ var plugin_entry_default = {
     const persistence = createPersistence(app.data?.kv ?? null, useStore2);
     await persistence.hydrate();
     ctx.subscriptions.push({ dispose: () => persistence.dispose() });
+    const history = createHistory(useStore2);
+    ctx.subscriptions.push({ dispose: () => history.dispose() });
     if (app.commands?.register) {
       ctx.subscriptions.push(
         app.commands.register("ping", {
