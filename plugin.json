@@ -64,12 +64,6 @@
         }
       },
       {
-        "name": "db-ping",
-        "title": { "en": "Probe the DB driver", "ko": "\ub4dc\ub77c\uc774\ubc84 \uc810\uac80" },
-        "bind": "service",
-        "description": "Sidecar liveness + driver identity (SQLite version)."
-      },
-      {
         "name": "db-test",
         "title": { "en": "Test a connection", "ko": "\uc811\uc18d \ud14c\uc2a4\ud2b8" },
         "bind": "service",
