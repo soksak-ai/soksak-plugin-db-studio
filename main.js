@@ -89811,8 +89811,95 @@ COMMENT ON TABLE ${schemaPrefix}"${p4.name}" IS '${p4.comment}'`;
   }
 };
 
+// src/features/migration/sql-generator/sqlite-generator.ts
+var SQLiteGenerator = class {
+  dialect = "sqlite";
+  q(name) {
+    return `"${name}"`;
+  }
+  unsupported(op) {
+    return `-- SQLite: '${op}' \uB294 ALTER \uB85C \uBD88\uAC00 \u2014 \uD14C\uC774\uBE14 \uC7AC\uC791\uC131 \uD544\uC694(\uC218\uB3D9)`;
+  }
+  generate(op) {
+    const p4 = op.params;
+    switch (op.type) {
+      case "createTable": {
+        const columns = p4.columns ?? [];
+        const inlinePk = columns.find((c3) => c3.autoIncrement && c3.isPrimaryKey);
+        const colDefs = columns.map((c3) => {
+          if (c3 === inlinePk) return `  ${this.q(c3.name)} INTEGER PRIMARY KEY AUTOINCREMENT`;
+          let def = `  ${this.q(c3.name)} ${c3.dataType}`;
+          if (c3.length) def += `(${c3.length})`;
+          if (!c3.nullable) def += " NOT NULL";
+          if (c3.defaultValue != null) def += ` DEFAULT ${c3.defaultValue}`;
+          if (c3.isUnique) def += " UNIQUE";
+          return def;
+        });
+        if (!inlinePk) {
+          const pks = columns.filter((c3) => c3.isPrimaryKey).map((c3) => this.q(c3.name));
+          if (pks.length > 0) colDefs.push(`  PRIMARY KEY (${pks.join(", ")})`);
+        }
+        return `CREATE TABLE ${this.q(p4.name)} (
+${colDefs.join(",\n")}
+);`;
+      }
+      case "dropTable":
+        return `DROP TABLE IF EXISTS ${this.q(p4.name)};`;
+      case "renameTable":
+        return `ALTER TABLE ${this.q(p4.oldName)} RENAME TO ${this.q(p4.newName)};`;
+      case "addColumn": {
+        let sql = `ALTER TABLE ${this.q(p4.table)} ADD COLUMN ${this.q(p4.name)} ${p4.dataType ?? "TEXT"}`;
+        if (!(p4.nullable ?? true)) sql += " NOT NULL";
+        if (p4.defaultValue != null) sql += ` DEFAULT ${p4.defaultValue}`;
+        const stmt = sql + ";";
+        if (p4.isUnique) {
+          return `${stmt}
+CREATE UNIQUE INDEX ${this.q(`uq_${p4.table}_${p4.name}`)} ON ${this.q(p4.table)}(${this.q(p4.name)});`;
+        }
+        return stmt;
+      }
+      case "dropColumn":
+        return `ALTER TABLE ${this.q(p4.table)} DROP COLUMN ${this.q(p4.name)};`;
+      case "renameColumn":
+        return `ALTER TABLE ${this.q(p4.table)} RENAME COLUMN ${this.q(p4.oldName)} TO ${this.q(p4.newName)};`;
+      case "modifyColumnType":
+      case "modifyColumnDefault":
+      case "setColumnNullable":
+      case "setColumnAutoIncrement":
+      case "addPrimaryKey":
+      case "dropPrimaryKey":
+      case "addForeignKey":
+      // FK 는 CREATE TABLE 인라인으로만, ALTER 추가 불가
+      case "dropForeignKey":
+        return this.unsupported(op.type);
+      case "setColumnUnique":
+        return p4.unique ? `CREATE UNIQUE INDEX ${this.q(`uq_${p4.table}_${p4.column}`)} ON ${this.q(p4.table)}(${this.q(p4.column)});` : `DROP INDEX ${this.q(`uq_${p4.table}_${p4.column}`)};`;
+      case "addUniqueConstraint": {
+        const name = p4.name ?? `uq_${p4.table}_${p4.columns[0]}`;
+        const cols = p4.columns.map((c3) => this.q(c3)).join(", ");
+        return `CREATE UNIQUE INDEX ${this.q(name)} ON ${this.q(p4.table)}(${cols});`;
+      }
+      case "dropUniqueConstraint":
+        return `DROP INDEX ${this.q(p4.name)};`;
+      case "createIndex": {
+        const unique = p4.unique ? "UNIQUE " : "";
+        const cols = p4.columns.map((c3) => this.q(c3)).join(", ");
+        return `CREATE ${unique}INDEX ${this.q(p4.name)} ON ${this.q(p4.table)}(${cols});`;
+      }
+      case "dropIndex":
+        return `DROP INDEX ${this.q(p4.name)};`;
+      default:
+        return `-- Unknown operation: ${op.type}`;
+    }
+  }
+  generateBatch(ops) {
+    return ops.map((op) => this.generate(op)).join("\n\n");
+  }
+};
+
 // src/features/migration/sql-generator/index.ts
 var generators = {
+  sqlite: new SQLiteGenerator(),
   mysql: new MySQLGenerator(),
   postgresql: new PostgreSQLGenerator()
 };
@@ -90873,8 +90960,8 @@ function registerCommands(ctx, store) {
     if (!p4.id || typeof p4.id !== "string") return { ok: false, code: "INVALID_INPUT", message: "id(\uD30C\uC77C\uBA85) required" };
     if (!fs.readText) return { ok: false, code: "GATE_REQUIRED", message: "fs \uAD8C\uD55C \uD544\uC694" };
     const dialect = p4.dialect ?? "mysql";
-    if (dialect !== "mysql" && dialect !== "postgresql") {
-      return { ok: false, code: "INVALID_INPUT", message: `migration-sql dialect \uBBF8\uC9C0\uC6D0: '${dialect}'(mysql|postgresql)` };
+    if (dialect !== "sqlite" && dialect !== "mysql" && dialect !== "postgresql") {
+      return { ok: false, code: "INVALID_INPUT", message: `migration-sql dialect \uBBF8\uC9C0\uC6D0: '${dialect}'(sqlite|mysql|postgresql)` };
     }
     try {
       const file = await resolveMigId(fs, p4.dir, p4.id);
@@ -90889,7 +90976,7 @@ function registerCommands(ctx, store) {
   }, {
     dir: { type: "string", required: true, description: "Absolute path to the migration directory" },
     id: { type: "string", required: true, description: ".mig filename (extension is optional)" },
-    dialect: { type: "string", enum: ["mysql", "postgresql"], description: "Target database dialect", default: "mysql" }
+    dialect: { type: "string", enum: ["sqlite", "mysql", "postgresql"], description: "Target database dialect", default: "mysql" }
   });
   add2("migration-apply", "Apply the up operations of a .mig file (or all files when id is omitted) to the working schema", { ko: "\uB9C8\uC774\uADF8\uB808\uC774\uC158 \uC801\uC6A9 up \uC2A4\uD0A4\uB9C8 \uBC18\uC601" }, (d3) => `${d3.applied ?? 0}\uAC1C \uC5F0\uC0B0\uC744 \uC801\uC6A9\uD588\uC2B5\uB2C8\uB2E4`, async (p4) => {
     const g3 = needFs();
