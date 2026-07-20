@@ -45,7 +45,7 @@ function EmptyHost({ message }: { message: string }) {
 }
 
 // ── Query ────────────────────────────────────────────────────────────────────
-function mapQueryResult(out: CmdResult): QueryResult {
+export function mapQueryResult(out: CmdResult): QueryResult {
   const cols = (out.columns as Array<{ name: string }> | undefined) ?? [];
   const rows = (out.rows as QueryCell[][] | undefined) ?? [];
   // The sidecar masks sensitive values to "<redacted:col>" before results leave it; the column
