@@ -353,6 +353,13 @@
         }
       },
       {
+        "name": "probe-clickpath",
+        "title": {
+          "en": "Probe dialog click-path",
+          "ko": "\ub2e4\uc774\uc5bc\ub85c\uadf8 \ud074\ub9ad \uacbd\ub85c \uc9c4\ub2e8"
+        }
+      },
+      {
         "name": "get-columns",
         "title": {
           "en": "List columns",
@@ -620,6 +627,14 @@
       {
         "id": "rename-input",
         "description": "Inline table-rename input, present only while renaming"
+      },
+      {
+        "id": "create-table-name",
+        "description": "Create-New-Table dialog: table name input, present only while the dialog is open"
+      },
+      {
+        "id": "create-table-submit",
+        "description": "Create-New-Table dialog: Create button, present only while the dialog is open"
       },
       {
         "id": "toaster",

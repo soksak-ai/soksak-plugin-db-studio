@@ -26,6 +26,7 @@ import { buildEdgeData } from './edge-data';
 import { columnsById } from '@/features/relationship/optionality';
 import { easeInOutCubic, lerpCamera, camerasClose } from './camera-tween';
 import { NODE_WIDTH, COLORS, applyCanvasColors, getLOD, LOD } from './constants';
+import { newTablePosition } from '@/features/layout/new-table-position';
 import { computeCanvasPalette } from '@/features/theme/host';
 import { useHostThemeEpoch } from '@/hooks/useTheme';
 import { CanvasContextMenu } from '../CanvasContextMenu';
@@ -1064,7 +1065,10 @@ export function PixiERDCanvas() {
         existing.update(data);
         existing.setRenderQualityLevel(qualityRef.current);
       } else {
-        const pos = useStore.getState().nodePositions[table.id] ?? { x: 0, y: 0 };
+        // 위치가 없는 테이블(헤드리스 create-table 커맨드 등)은 월드 원점이 아니라 현재
+        // 뷰포트 중심에 놓는다 — 원점 폴백은 카메라가 멀리 주차돼 있으면 화면 밖으로 떨어진다.
+        const pos = useStore.getState().nodePositions[table.id]
+          ?? newTablePosition(useStore.getState().viewport);
         const r = new TableNodeRenderer(data);
         r.setLOD(lodRef.current);
         r.setZoom(camRef.current.zoom);

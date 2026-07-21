@@ -59,6 +59,7 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  onOpenAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
@@ -68,6 +69,22 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        onOpenAutoFocus={(event) => {
+          // Shadow DOM 포털에서는 Radix 의 기본 자동 포커스가 content 컨테이너(div)에 걸려
+          // 자식 input 의 autoFocus 를 덮는다 → 다이얼로그가 열려도 첫 입력칸에 커서가 없어
+          // 사용자가 바로 타이핑을 못 한다(예: Create New Table 의 Table Name). 소비자 핸들러를
+          // 먼저 존중하고, 막지 않았으면 첫 활성 입력 필드를 직접 포커스한다.
+          onOpenAutoFocus?.(event)
+          if (event.defaultPrevented) return
+          const root = event.currentTarget as HTMLElement | null
+          const field = root?.querySelector<HTMLElement>(
+            'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), [contenteditable="true"]'
+          )
+          if (field) {
+            event.preventDefault()
+            field.focus()
+          }
+        }}
         className={cn(
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 outline-none sm:max-w-lg",
           className

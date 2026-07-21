@@ -45,7 +45,11 @@
     --color-sidebar-ring: var(--sidebar-ring);
 }
 
-:root {
+/* 라이트 토큰. Shadow DOM 안에서는 :root 가 매칭되지 않으므로(문서 root 는 shadow 밖) .light
+   에도 적용한다 — App 이 portalRoot(=shadow host)에 light/dark 클래스를 토글하며, .dark 만
+   선언돼 있으면 라이트 모드에서 --background 등이 미해결로 투명해진다(다이얼로그 카드가 사라짐). */
+:root,
+.light {
     --radius: 0.625rem;
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);

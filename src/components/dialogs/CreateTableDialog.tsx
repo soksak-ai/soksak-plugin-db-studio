@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useStore } from '@/store';
 import { DATA_TYPES } from '@/constants/data-types';
+import { newTablePosition } from '@/features/layout/new-table-position';
 import { generateId } from '@/lib/id';
 import type { Column } from '@/types/schema';
 import {
@@ -113,10 +114,9 @@ export function CreateTableDialog() {
       columns: tableColumns.length > 0 ? (tableColumns as Column[]) : undefined,
     });
 
-    setNodePosition(id, {
-      x: Math.random() * 400 + 100,
-      y: Math.random() * 400 + 100,
-    });
+    // 새 테이블은 카메라가 지금 보고 있는 곳(뷰포트 중심)에 놓아야 화면에 보인다. 원점 기준
+    // 좌표는 카메라가 멀리 주차돼 있으면 화면 밖으로 떨어진다. jitter 로 반복 생성을 흩뜨린다.
+    setNodePosition(id, newTablePosition(useStore.getState().viewport, (Math.random() - 0.5) * 120));
 
     setOpen(false);
     resetForm();
@@ -147,6 +147,7 @@ export function CreateTableDialog() {
           <div className="space-y-2">
             <label className="text-sm font-medium">Table Name</label>
             <Input
+              data-node="create-table-name"
               value={tableName}
               onChange={(e) => setTableName(e.target.value)}
               placeholder="table_name"
@@ -255,6 +256,7 @@ export function CreateTableDialog() {
             Cancel
           </Button>
           <Button
+            data-node="create-table-submit"
             onClick={handleCreate}
             disabled={!tableName.trim()}
             className="bg-blue-600 hover:bg-blue-700 text-white"
